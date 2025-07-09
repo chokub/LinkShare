@@ -1,73 +1,67 @@
-# Welcome to your Lovable project
+# LinkJoy Vault
 
-## Project info
+A modern bookmark management application with AI-powered content analysis and platform-specific metadata extraction.
 
-**URL**: https://lovable.dev/projects/c9034eed-2805-4db2-9660-d681ea7b1c3f
+## Features
 
-## How can I edit this code?
+- 🔖 **Smart Bookmark Management**: Organize and categorize your bookmarks with tags
+- 🤖 **AI Content Analysis**: Get insights about your saved content
+- 🏷️ **Platform Support**: Automatic metadata extraction for YouTube, Shopee, and more
+- 🎨 **Modern UI**: Beautiful, responsive interface with dark/light theme
+- 🔐 **User Authentication**: Secure login with Supabase
+- 📱 **Mobile Responsive**: Works perfectly on all devices
 
-There are several ways of editing your application.
+## Quick Start
 
-**Use Lovable**
+### Installation
+```bash
+npm install
+```
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/c9034eed-2805-4db2-9660-d681ea7b1c3f) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+### Development
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### Auto Push Scripts
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+For easy deployment to GitHub, use these scripts:
 
-**Use GitHub Codespaces**
+- **`auto-push.bat`** - Full auto-push with detailed output and pause
+- **`quick-push.bat`** - Fast auto-push without pause
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Just double-click the script file to automatically:
+1. Add all changes
+2. Commit with timestamp
+3. Push to GitHub
 
-## What technologies are used for this project?
+## Tech Stack
 
-This project is built with:
+- **Frontend**: React + TypeScript + Vite
+- **UI**: Tailwind CSS + shadcn/ui
+- **Backend**: Supabase (Auth, Database)
+- **AI**: OpenAI API integration
+- **Styling**: Tailwind CSS with custom components
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Project Structure
 
-## How can I deploy this project?
+```
+src/
+├── components/          # React components
+│   ├── ui/            # shadcn/ui components
+│   └── ...            # Custom components
+├── hooks/              # Custom React hooks
+├── pages/              # Page components
+├── integrations/       # External service integrations
+└── lib/               # Utility functions
+```
 
-Simply open [Lovable](https://lovable.dev/projects/c9034eed-2805-4db2-9660-d681ea7b1c3f) and click on Share -> Publish.
+## Contributing
 
-## Can I connect a custom domain to my Lovable project?
+1. Make your changes
+2. Run `auto-push.bat` or `quick-push.bat`
+3. Your changes are automatically pushed to GitHub!
 
-Yes, you can!
+## License
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+MIT License
