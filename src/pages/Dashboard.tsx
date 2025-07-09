@@ -19,6 +19,61 @@ import { Badge } from "@/components/ui/badge";
 import { X, Edit2, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
+// ฟังก์ชันใหม่: autoDetectPlatform (แทน detectPlatformFromUrl)
+function autoDetectPlatform(url: string): string {
+  try {
+    const { hostname } = new URL(url);
+    let domain = hostname.replace(/^www\./, "");
+    const parts = domain.split(".");
+    let platform = "";
+    if (parts.length >= 2) {
+      if (["co", "com", "net", "org", "tv", "io", "th"].includes(parts[parts.length - 2])) {
+        platform = parts[parts.length - 3];
+      } else {
+        platform = parts[parts.length - 2];
+      }
+    } else {
+      platform = parts[0];
+    }
+    // Normalize platform name
+    const special = {
+      youtube: "YouTube",
+      youtu: "YouTube",
+      facebook: "Facebook",
+      shopee: "Shopee",
+      lazada: "Lazada",
+      twitch: "Twitch",
+      tiktok: "TikTok",
+      instagram: "Instagram",
+      twitter: "Twitter"
+    };
+    const key = platform.toLowerCase();
+    if (special[key]) return special[key];
+    return platform.charAt(0).toUpperCase() + platform.slice(1).toLowerCase();
+  } catch {
+    return "Other";
+  }
+}
+
+// ฟังก์ชัน normalizePlatformName
+function normalizePlatformName(name: string): string {
+  if (!name) return "";
+  const special = {
+    youtube: "YouTube",
+    youtu: "YouTube",
+    facebook: "Facebook",
+    shopee: "Shopee",
+    lazada: "Lazada",
+    twitch: "Twitch",
+    tiktok: "TikTok",
+    instagram: "Instagram",
+    twitter: "Twitter"
+  };
+  const key = name.toLowerCase();
+  if (special[key]) return special[key];
+  return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+}
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
@@ -177,20 +232,25 @@ const Dashboard = () => {
 
   const onSubmit = async (values: any) => {
     await new Promise((resolve) => setTimeout(resolve, 200)); // for UX
-    const platformTag = metadata?.platform;
+    // ถ้า metadata.platform ไม่มี หรือเป็น Other ให้ auto detect
+    const platformTag = (
+      metadata?.platform && metadata.platform !== "Other"
+        ? metadata.platform
+        : autoDetectPlatform(values.url)
+    );
     const userTags = values.tags ? values.tags.split(",").map((t: string) => t.trim()).filter(Boolean) : [];
-    const tags = platformTag && !userTags.includes(platformTag) ? [platformTag, ...userTags] : userTags;
+    console.log('DEBUG onSubmit:', { platformTag, userTags, metadata });
     addBookmark({
       url: values.url,
       title: values.title,
       user_description: values.user_description,
-      tags,
+      tags: userTags, // เก็บเฉพาะ userTags
       channel_name: metadata?.channel || metadata?.channel_name || metadata?.poster_name || null,
       channel_avatar: metadata?.channel_avatar || null,
       group_name: metadata?.group_name || null,
       description: metadata?.caption || metadata?.description || null,
       thumbnail_url: metadata?.thumbnail || null,
-      platform: metadata?.platform || null
+      platform: platformTag // เก็บ platform แยก
     });
     setAddDialogOpen(false);
     form.reset();
@@ -283,19 +343,8 @@ const Dashboard = () => {
   const getFilteredBookmarks = () => {
     if (selectedFilter === 'all') return bookmarks;
     if (selectedFilter === 'favorites') return bookmarks.filter(b => b.is_favorite);
-    // filter platform (เช่น youtube, instagram, ...)
-    const platformMap = {
-      youtube: 'YouTube',
-      instagram: 'Instagram',
-      tiktok: 'TikTok',
-      facebook: 'Facebook',
-      twitter: 'Twitter',
-    };
-    if (platformMap[selectedFilter]) {
-      return bookmarks.filter(b => (b.platform || '').toLowerCase() === platformMap[selectedFilter].toLowerCase());
-    }
-    // filter by tag (ถ้า selectedFilter ตรงกับชื่อ tag)
-    return bookmarks.filter(b => (b.tags || []).map(t => t.toLowerCase()).includes(selectedFilter.toLowerCase()));
+    // filter platform
+    return bookmarks.filter(b => normalizePlatformName(b.platform) === normalizePlatformName(selectedFilter));
   };
 
   return (
@@ -305,7 +354,9 @@ const Dashboard = () => {
           onAddLinkClick={handleAddLinkClick}
           onFilterChange={handleFilterChange}
           selectedFilter={selectedFilter}
-          platforms={Array.from(new Set(bookmarks.map(b => b.platform).filter(Boolean)))}
+          platforms={Array.from(
+            new Set(bookmarks.map(b => normalizePlatformName(b.platform)).filter(Boolean))
+          )}
         />
         
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -497,6 +548,15 @@ const Dashboard = () => {
                   </FormItem>
                 )}
               />
+              {/* หัวข้อใหม่: Platform (readonly) */}
+              <div>
+                <div className="font-medium text-sm mb-1">Platform</div>
+                <Badge variant="secondary" className="opacity-80 cursor-not-allowed">
+                  {(metadata?.platform && metadata.platform !== "Other")
+                    ? metadata.platform
+                    : autoDetectPlatform(form.watch("url"))}
+                </Badge>
+              </div>
               <FormField name="title" control={form.control} rules={{ required: "กรุณากรอกชื่อเรื่อง" }}
                 render={({ field }) => (
                   <FormItem>

@@ -78,169 +78,74 @@ function extractInstagramPostId(url: string): string | null {
 }
 
 async function extractMetadata(url: string): Promise<MetadataResult> {
-  console.log(`Extracting metadata for: ${url}`);
-  
-  const platform = detectPlatform(url);
-  
   try {
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       }
     });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const html = await response.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    
-    // Extract title with priority order and better cleaning
-    let title = doc.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
-                doc.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ||
-                doc.querySelector('title')?.textContent ||
-                '';
-    
-    // Enhanced title cleaning for all platforms
-    title = title.replace(/ - YouTube$/, '')
-                 .replace(/ \| Instagram$/, '')
-                 .replace(/ \| TikTok$/, '')
-                 .replace(/ \| Facebook$/, '')
-                 .replace(/ \| Twitter$/, '')
-                 .replace(/ on Instagram: ".*"$/, '')
-                 .replace(/ • Instagram$/, '')
-                 .replace(/^\(.*\) /, '') // Remove leading parentheses content
-                 .trim();
-    
-    // Extract description with better fallbacks
-    const description = doc.querySelector('meta[property="og:description"]')?.getAttribute('content') ||
-                       doc.querySelector('meta[name="twitter:description"]')?.getAttribute('content') ||
-                       doc.querySelector('meta[name="description"]')?.getAttribute('content') ||
-                       doc.querySelector('meta[property="description"]')?.getAttribute('content') ||
-                       '';
-    
-    // Initialize result object
-    const result: MetadataResult = {
+
+    // Title
+    let title =
+      doc.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
+      doc.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ||
+      doc.querySelector('meta[name="title"]')?.getAttribute('content') ||
+      doc.querySelector('title')?.textContent ||
+      doc.querySelector('h1')?.textContent ||
+      '';
+
+    // Description
+    let description =
+      doc.querySelector('meta[property="og:description"]')?.getAttribute('content') ||
+      doc.querySelector('meta[name="twitter:description"]')?.getAttribute('content') ||
+      doc.querySelector('meta[name="description"]')?.getAttribute('content') ||
+      doc.querySelector('meta[property="description"]')?.getAttribute('content') ||
+      '';
+
+    // Thumbnail
+    let thumbnail =
+      doc.querySelector('meta[property="og:image"]')?.getAttribute('content') ||
+      doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content') ||
+      '';
+
+    // Fallback: หา <img> ที่ใหญ่ที่สุดในหน้า
+    if (!thumbnail) {
+      let maxArea = 0;
+      let bestImg = '';
+      doc.querySelectorAll('img').forEach(img => {
+        const src = img.getAttribute('src') || '';
+        const width = parseInt(img.getAttribute('width') || '0');
+        const height = parseInt(img.getAttribute('height') || '0');
+        const area = width * height;
+        if (src && area > maxArea && !src.startsWith('data:')) {
+          maxArea = area;
+          bestImg = src;
+        }
+      });
+      if (bestImg) thumbnail = bestImg;
+    }
+
+    // Clean up
+    title = title.trim();
+    description = description.trim();
+    thumbnail = thumbnail.trim();
+
+    return {
+      title,
+      description,
+      thumbnail,
+      platform: '' // หรือจะใส่ autoDetectPlatform(url) ก็ได้
+    };
+  } catch (e) {
+    return {
       title: '',
       description: '',
       thumbnail: '',
-      platform,
-      channel_name: undefined,
-      channel_avatar: undefined
-    };
-    
-    // Platform-specific extraction
-    if (platform === 'YouTube') {
-      const videoId = extractYouTubeVideoId(url);
-      if (videoId) {
-        // YouTube thumbnail
-        const thumbnailOptions = [
-          `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-          `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-          `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
-        ];
-        result.thumbnail = thumbnailOptions[0];
-        
-        // Extract channel information
-        const channelName = doc.querySelector('meta[name="author"]')?.getAttribute('content') ||
-                           doc.querySelector('link[itemprop="name"]')?.getAttribute('content') ||
-                           doc.querySelector('span[itemprop="author"] link[itemprop="name"]')?.getAttribute('content') ||
-                           '';
-        
-        if (channelName) {
-          result.channel_name = channelName;
-          // Channel avatar - try to extract from page or use YouTube default
-          const channelAvatar = doc.querySelector('link[itemprop="thumbnailUrl"]')?.getAttribute('href') ||
-                               doc.querySelector('img[class*="channel"]')?.getAttribute('src') ||
-                               `https://yt3.ggpht.com/a/default-user=s88-c-k-c0x00ffffff-no-rj`;
-          result.channel_avatar = channelAvatar;
-        }
-      }
-    } else if (platform === 'Facebook') {
-      // Better Facebook thumbnail extraction
-      let fbThumbnail = doc.querySelector('meta[property="og:image"]')?.getAttribute('content') ||
-                       doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content') ||
-                       '';
-      
-      // For Facebook, try to get the actual post image instead of profile picture
-      const postImages = doc.querySelectorAll('img[src*="scontent"]');
-      if (postImages.length > 0) {
-        const largestImage = Array.from(postImages).find(img => {
-          const src = img.getAttribute('src') || '';
-          return src.includes('scontent') && !src.includes('p50x50') && !src.includes('p40x40');
-        });
-        if (largestImage) {
-          fbThumbnail = largestImage.getAttribute('src') || fbThumbnail;
-        }
-      }
-      
-      result.thumbnail = fbThumbnail;
-    } else if (platform === 'Instagram') {
-      // Better Instagram thumbnail extraction
-      let igThumbnail = doc.querySelector('meta[property="og:image"]')?.getAttribute('content') ||
-                       doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content') ||
-                       '';
-      
-      // For Instagram, try to get the actual post image
-      const postImages = doc.querySelectorAll('img[src*="cdninstagram"]');
-      if (postImages.length > 0) {
-        const postImage = Array.from(postImages).find(img => {
-          const src = img.getAttribute('src') || '';
-          return src.includes('cdninstagram') && !src.includes('150x150') && !src.includes('44x44');
-        });
-        if (postImage) {
-          igThumbnail = postImage.getAttribute('src') || igThumbnail;
-        }
-      }
-      
-      result.thumbnail = igThumbnail;
-    }
-    
-    // Fallback to og:image if platform-specific method didn't work
-    if (!result.thumbnail) {
-      result.thumbnail = doc.querySelector('meta[property="og:image"]')?.getAttribute('content') ||
-                        doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content') ||
-                        doc.querySelector('meta[name="twitter:image:src"]')?.getAttribute('content') ||
-                        '';
-    }
-    
-    // Ensure thumbnail has protocol
-    if (result.thumbnail && result.thumbnail.startsWith('//')) {
-      result.thumbnail = `https:${result.thumbnail}`;
-    } else if (result.thumbnail && !result.thumbnail.startsWith('http')) {
-      result.thumbnail = `https://${result.thumbnail}`;
-    }
-    
-    // Final fallback
-    if (!result.thumbnail) {
-      result.thumbnail = 'https://images.unsplash.com/photo-1611224923853-80b023f02d71?w=300&h=200&fit=crop&q=60';
-    }
-    
-    // Set final values
-    result.title = title || 'ไม่สามารถดึงชื่อเรื่องได้';
-    result.description = description || 'ไม่สามารถดึงคำอธิบายได้';
-    
-    console.log('Extracted metadata:', { 
-      title: result.title.substring(0, 100), 
-      description: result.description.substring(0, 100), 
-      thumbnail: result.thumbnail, 
-      platform: result.platform,
-      channel_name: result.channel_name,
-      channel_avatar: result.channel_avatar
-    });
-    
-    return result;
-    
-  } catch (error) {
-    console.error('Metadata extraction error:', error);
-    
-    // Fallback with basic info
-    return {
-      title: 'ไม่สามารถดึงชื่อเรื่องได้',
-      description: 'ไม่สามารถดึงคำอธิบายได้',
-      thumbnail: 'https://images.unsplash.com/photo-1611224923853-80b023f02d71?w=300&h=200&fit=crop&q=60',
-      platform
+      platform: ''
     };
   }
 }

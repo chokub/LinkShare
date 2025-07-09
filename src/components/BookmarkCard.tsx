@@ -184,7 +184,14 @@ export const BookmarkCard = ({
 
                   {/* Tags */}
                   <div className="flex flex-wrap gap-1 mb-2">
-                    {bookmark.tags.slice(0, 3).map((tag, index) => (
+                    {/* Platform tag (readonly/locked) */}
+                    {bookmark.platform && (
+                      <Badge variant="secondary" className="text-xs opacity-80 cursor-not-allowed" title="Platform tag (auto)">
+                        {bookmark.platform}
+                      </Badge>
+                    )}
+                    {/* User tags (editable) */}
+                    {bookmark.tags && bookmark.tags.map((tag, index) => (
                       <Badge key={index} variant="secondary" className="text-xs">
                         {tag}
                       </Badge>
