@@ -39,10 +39,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (event === 'SIGNED_IN' && session?.user) {
           // ป้องกัน toast ซ้ำ: ใช้ sessionStorage
           if (!sessionStorage.getItem('login-toast-shown')) {
-            toast({
-              title: "เข้าสู่ระบบสำเร็จ!",
-              description: `ยินดีต้อนรับ ${session.user.email}`,
-            });
+          toast({
+            title: "เข้าสู่ระบบสำเร็จ!",
+            description: `ยินดีต้อนรับ ${session.user.email}`,
+          });
             sessionStorage.setItem('login-toast-shown', '1');
           }
         }

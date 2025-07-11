@@ -50,15 +50,15 @@ const Header = ({ onAuthClick }: HeaderProps) => {
             </>
           ) : (
             <>
-              <Button variant="ghost" onClick={onAuthClick}>
-                เข้าสู่ระบบ
-              </Button>
-              <Button 
-                onClick={onAuthClick}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-              >
-                เริ่มใช้งาน
-              </Button>
+          <Button variant="ghost" onClick={onAuthClick}>
+            เข้าสู่ระบบ
+          </Button>
+          <Button 
+            onClick={onAuthClick}
+            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+          >
+            เริ่มใช้งาน
+          </Button>
             </>
           )}
         </div>
@@ -100,15 +100,15 @@ const Header = ({ onAuthClick }: HeaderProps) => {
                 </>
               ) : (
                 <>
-                  <Button variant="ghost" onClick={onAuthClick} className="justify-start">
-                    เข้าสู่ระบบ
-                  </Button>
-                  <Button 
-                    onClick={onAuthClick}
-                    className="justify-start bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-                  >
-                    เริ่มใช้งาน
-                  </Button>
+              <Button variant="ghost" onClick={onAuthClick} className="justify-start">
+                เข้าสู่ระบบ
+              </Button>
+              <Button 
+                onClick={onAuthClick}
+                className="justify-start bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+              >
+                เริ่มใช้งาน
+              </Button>
                 </>
               )}
             </div>

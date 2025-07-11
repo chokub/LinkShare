@@ -84,51 +84,51 @@ async function extractMetadata(url: string): Promise<MetadataResult> {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       }
     });
-
+    
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const html = await response.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
-
+    
     // Title
     let title =
       doc.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
-      doc.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ||
+                doc.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ||
       doc.querySelector('meta[name="title"]')?.getAttribute('content') ||
-      doc.querySelector('title')?.textContent ||
+                doc.querySelector('title')?.textContent ||
       doc.querySelector('h1')?.textContent ||
       '';
-
+    
     // Description
     let description =
       doc.querySelector('meta[property="og:description"]')?.getAttribute('content') ||
-      doc.querySelector('meta[name="twitter:description"]')?.getAttribute('content') ||
-      doc.querySelector('meta[name="description"]')?.getAttribute('content') ||
-      doc.querySelector('meta[property="description"]')?.getAttribute('content') ||
-      '';
-
+                       doc.querySelector('meta[name="twitter:description"]')?.getAttribute('content') ||
+                       doc.querySelector('meta[name="description"]')?.getAttribute('content') ||
+                       doc.querySelector('meta[property="description"]')?.getAttribute('content') ||
+                       '';
+    
     // Thumbnail
     let thumbnail =
       doc.querySelector('meta[property="og:image"]')?.getAttribute('content') ||
-      doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content') ||
-      '';
-
+                       doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content') ||
+                       '';
+      
     // Fallback: หา <img> ที่ใหญ่ที่สุดในหน้า
     if (!thumbnail) {
       let maxArea = 0;
       let bestImg = '';
       doc.querySelectorAll('img').forEach(img => {
-        const src = img.getAttribute('src') || '';
+          const src = img.getAttribute('src') || '';
         const width = parseInt(img.getAttribute('width') || '0');
         const height = parseInt(img.getAttribute('height') || '0');
         const area = width * height;
         if (src && area > maxArea && !src.startsWith('data:')) {
           maxArea = area;
           bestImg = src;
-        }
+    }
       });
       if (bestImg) thumbnail = bestImg;
     }
-
+    
     // Clean up
     title = title.trim();
     description = description.trim();
@@ -141,11 +141,12 @@ async function extractMetadata(url: string): Promise<MetadataResult> {
       platform: '' // หรือจะใส่ autoDetectPlatform(url) ก็ได้
     };
   } catch (e) {
+    const platform = detectPlatform(url);
     return {
-      title: '',
+      title: platform,
       description: '',
       thumbnail: '',
-      platform: ''
+      platform,
     };
   }
 }

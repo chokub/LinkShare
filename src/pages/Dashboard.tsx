@@ -18,6 +18,8 @@ import { useForm } from "react-hook-form";
 import { Badge } from "@/components/ui/badge";
 import { X, Edit2, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { TagInput } from "@/components/ui/tag-input";
 
 // ฟังก์ชันใหม่: autoDetectPlatform (แทน detectPlatformFromUrl)
 function autoDetectPlatform(url: string): string {
@@ -88,13 +90,14 @@ const Dashboard = () => {
   const [tagLoading, setTagLoading] = useState(false);
   const [editingTag, setEditingTag] = useState(null);
   const tagForm = useForm({ defaultValues: { name: "", color: "#6366f1" } });
+  const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(null);
 
   const form = useForm({
     defaultValues: {
       url: "",
       title: "",
       user_description: "",
-      tags: ""
+      tags: []  // Change to array instead of string
     }
   });
 
@@ -238,23 +241,32 @@ const Dashboard = () => {
         ? metadata.platform
         : autoDetectPlatform(values.url)
     );
-    const userTags = values.tags ? values.tags.split(",").map((t: string) => t.trim()).filter(Boolean) : [];
+    const userTags = values.tags || []; // Use tags array directly
+    // --- เพิ่ม logic sync tag เข้า table tags ---
+    const existingTagNames = tags.map(t => t.name);
+    for (const tagName of userTags) {
+      if (!existingTagNames.includes(tagName)) {
+        await supabase.from("tags").insert({ name: tagName, color: "#6366f1", user_id: user.id });
+      }
+    }
+    // ---
     console.log('DEBUG onSubmit:', { platformTag, userTags, metadata });
     addBookmark({
       url: values.url,
       title: values.title,
       user_description: values.user_description,
-      tags: userTags, // เก็บเฉพาะ userTags
+      tags: userTags,
       channel_name: metadata?.channel || metadata?.channel_name || metadata?.poster_name || null,
       channel_avatar: metadata?.channel_avatar || null,
       group_name: metadata?.group_name || null,
       description: metadata?.caption || metadata?.description || null,
       thumbnail_url: metadata?.thumbnail || null,
-      platform: platformTag // เก็บ platform แยก
+      platform: platformTag
     });
     setAddDialogOpen(false);
     form.reset();
     setMetadata(null);
+    fetchTags();
   };
 
   const fetchTags = async () => {
@@ -267,6 +279,10 @@ const Dashboard = () => {
     setTagLoading(false);
     if (!error) setTags(data);
   };
+
+  useEffect(() => {
+    if (user) fetchTags();
+  }, [user]);
 
   useEffect(() => {
     if (tagDialogOpen && user) fetchTags();
@@ -341,10 +357,17 @@ const Dashboard = () => {
 
   // ฟังก์ชันช่วย filter bookmarks ตาม selectedFilter
   const getFilteredBookmarks = () => {
-    if (selectedFilter === 'all') return bookmarks;
-    if (selectedFilter === 'favorites') return bookmarks.filter(b => b.is_favorite);
-    // filter platform
-    return bookmarks.filter(b => normalizePlatformName(b.platform) === normalizePlatformName(selectedFilter));
+    let filtered = bookmarks;
+    if (selectedFilter !== 'all' && selectedFilter !== 'favorites') {
+      filtered = filtered.filter(b => normalizePlatformName(b.platform) === normalizePlatformName(selectedFilter));
+    }
+    if (selectedFilter === 'favorites') {
+      filtered = filtered.filter(b => b.is_favorite);
+    }
+    if (selectedTagFilter) {
+      filtered = filtered.filter(b => (b.tags || []).includes(selectedTagFilter));
+    }
+    return filtered;
   };
 
   return (
@@ -467,6 +490,57 @@ const Dashboard = () => {
                     ลิงก์ที่บันทึกไว้
                   </h2>
                 </div>
+                {/* Tag Filter UI */}
+                {selectedTagFilter && (
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="text-sm">กำลังกรองด้วยแท็ก:</span>
+                    {(() => {
+                      const tagObj = tags.find(t => t.name === selectedTagFilter);
+                      return (
+                        <Badge
+                          style={{
+                            background: tagObj?.color || "#6366f1",
+                            color: "#fff",
+                            fontWeight: "bold",
+                            boxShadow: "0 0 0 2px #fff, 0 2px 8px rgba(0,0,0,0.15)"
+                          }}
+                          className="text-base"
+                        >
+                          {selectedTagFilter}
+                        </Badge>
+                      );
+                    })()}
+                    <button onClick={() => setSelectedTagFilter(null)} className="ml-2 text-xs text-red-500 hover:underline">ล้าง</button>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2 mb-2">
+                  <span className="text-sm text-muted-foreground mr-2">กรองด้วยแท็ก:</span>
+                  <Badge
+                    variant={selectedTagFilter === null ? "default" : "outline"}
+                    className={`cursor-pointer ${selectedTagFilter === null ? "scale-110 font-bold ring-2 ring-blue-400" : ""}`}
+                    onClick={() => setSelectedTagFilter(null)}
+                  >
+                    ทั้งหมด
+                  </Badge>
+                  {Array.from(new Set([
+                    ...tags.map(t => t.name),
+                    ...bookmarks.flatMap(b => b.tags || [])
+                  ])).filter(Boolean).map(name => {
+                    const tagObj = tags.find(t => t.name === name);
+                    const isSelected = selectedTagFilter === name;
+                    return (
+                      <Badge
+                        key={name}
+                        variant={isSelected ? "default" : "outline"}
+                        className={`cursor-pointer transition-all ${isSelected ? "scale-110 font-bold ring-2 ring-blue-400 shadow-lg" : ""}`}
+                        style={{ background: tagObj?.color || undefined, color: tagObj?.color ? '#fff' : undefined }}
+                        onClick={() => setSelectedTagFilter(name)}
+                      >
+                        {name}
+                      </Badge>
+                    );
+                  })}
+                </div>
 
                 {/* Loading State */}
                 {bookmarksLoading && (
@@ -582,9 +656,14 @@ const Dashboard = () => {
               <FormField name="tags" control={form.control}
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>แท็ก (คั่นด้วย ,)</FormLabel>
+                    <FormLabel>แท็ก</FormLabel>
                     <FormControl>
-                      <Input placeholder="เช่น ข่าว,AI,เทคโนโลยี" {...field} />
+                      <TagInput
+                        {...field}
+                        placeholder="พิมพ์แท็กแล้วกด Enter"
+                        tags={tags}
+                        onValueChange={(value) => field.onChange(value)}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

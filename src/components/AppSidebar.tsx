@@ -20,6 +20,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { useNavigate } from "react-router-dom";
 
 interface AppSidebarProps {
   onAddLinkClick: () => void;
@@ -29,6 +30,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ onAddLinkClick, onFilterChange, selectedFilter, platforms }: AppSidebarProps) {
+  const navigate = useNavigate();
   const staticMenu = [
     { title: "ทั้งหมด", icon: Home, value: "all" },
     { title: "รายการโปรด", icon: Heart, value: "favorites" },
@@ -100,7 +102,7 @@ export function AppSidebar({ onAddLinkClick, onFilterChange, selectedFilter, pla
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton>
+                <SidebarMenuButton onClick={() => navigate("/tags")}>
                   <Tag className="h-4 w-4" />
                   <span>จัดการแท็ก</span>
                 </SidebarMenuButton>

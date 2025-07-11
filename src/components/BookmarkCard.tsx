@@ -9,7 +9,8 @@ import {
   Trash2,
   Eye,
   EyeOff,
-  Calendar
+  Calendar,
+  Plus
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -38,6 +39,8 @@ import { Input } from "@/components/ui/input";
 import { useForm } from "react-hook-form";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { TagInput } from "@/components/ui/tag-input";
 
 interface BookmarkCardProps {
   bookmark: {
@@ -68,12 +71,34 @@ export const BookmarkCard = ({
   cardSize = "scale-100",
   viewMode = "grid"
 }: BookmarkCardProps) => {
-  const { toggleFavorite, deleteBookmark } = useBookmarks();
+  const { toggleFavorite, deleteBookmark, updateBookmark } = useBookmarks();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [uploader, setUploader] = useState<{ avatar_url: string | null, full_name: string | null } | null>(null);
-  const editForm = useForm({ defaultValues: { title: bookmark.title || "", user_description: bookmark.user_description || "", tags: (bookmark.tags || []).join(",") } });
+  const [tags, setTags] = useState<Array<{ id: string; name: string; color: string; textColor: string }>>([]);
+  const { user } = useAuth();
+  const editForm = useForm({ 
+    defaultValues: { 
+      title: bookmark.title || "", 
+      user_description: bookmark.user_description || "", 
+      tags: bookmark.tags || []  // Array of tags
+    } 
+  });
+
+  const fetchTags = async () => {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from("tags")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true });
+    if (!error) setTags(data);
+  };
+
+  useEffect(() => {
+    fetchTags();
+  }, [user]);
 
   const handleDelete = () => {
     deleteBookmark(bookmark.id);
@@ -81,6 +106,21 @@ export const BookmarkCard = ({
 
   const handleToggleFavorite = () => {
     toggleFavorite({ id: bookmark.id, isFavorite: bookmark.is_favorite || false });
+  };
+
+  const handleAddSuggestedTag = async (tagToAdd: string) => {
+    const currentTags = bookmark.tags || [];
+    if (!currentTags.includes(tagToAdd)) {
+      const newTags = [...currentTags, tagToAdd];
+      try {
+        await updateBookmark({
+          id: bookmark.id,
+          tags: newTags
+        });
+      } catch (error) {
+        console.error('Failed to add suggested tag:', error);
+      }
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -103,9 +143,30 @@ export const BookmarkCard = ({
     editForm.reset({ title: bookmark.title || "", user_description: bookmark.user_description || "", tags: (bookmark.tags || []).join(",") });
   };
 
-  const handleEditSubmit = (values: any) => {
-    // TODO: เรียกฟังก์ชัน updateBookmark (ต้องเพิ่มใน useBookmarks)
-    setEditOpen(false);
+  const handleEditSubmit = async (values: any) => {
+    try {
+      await updateBookmark({
+        id: bookmark.id,
+        title: values.title,
+        user_description: values.user_description,
+        tags: values.tags // Array of tags
+      });
+      setEditOpen(false);
+    } catch (error) {
+      console.error('Failed to update bookmark:', error);
+    }
+  };
+
+  // Helper function to get tag style
+  const getTagStyle = (tagName: string) => {
+    const tagData = tags.find(t => t.name === tagName);
+    if (tagData?.color) {
+      return {
+        background: tagData.color,
+        color: tagData.textColor || '#ffffff'
+      };
+    }
+    return undefined;
   };
 
   if (viewMode === "list") {
@@ -117,26 +178,26 @@ export const BookmarkCard = ({
         onClick={() => window.open(bookmark.url, '_blank')}
       >
         <Card className="w-full hover:shadow-md transition-shadow cursor-pointer">
-          <div className="flex flex-col sm:flex-row">
-            {/* Thumbnail */}
-            <div className="w-full sm:w-48 h-32 sm:h-24 flex-shrink-0">
-              {bookmark.thumbnail_url ? (
-                <img 
-                  src={bookmark.thumbnail_url} 
-                  alt={bookmark.title || "Thumbnail"}
-                  className="w-full h-full object-cover rounded-t-lg sm:rounded-l-lg sm:rounded-t-none"
-                />
-              ) : (
-                <div className="w-full h-full bg-muted flex items-center justify-center rounded-t-lg sm:rounded-l-lg sm:rounded-t-none">
-                  <ExternalLink className="h-8 w-8 text-muted-foreground" />
-                </div>
-              )}
-            </div>
+        <div className="flex flex-col sm:flex-row">
+          {/* Thumbnail */}
+          <div className="w-full sm:w-48 h-32 sm:h-24 flex-shrink-0">
+            {bookmark.thumbnail_url ? (
+              <img 
+                src={bookmark.thumbnail_url} 
+                alt={bookmark.title || "Thumbnail"}
+                className="w-full h-full object-cover rounded-t-lg sm:rounded-l-lg sm:rounded-t-none"
+              />
+            ) : (
+              <div className="w-full h-full bg-muted flex items-center justify-center rounded-t-lg sm:rounded-l-lg sm:rounded-t-none">
+                <ExternalLink className="h-8 w-8 text-muted-foreground" />
+              </div>
+            )}
+          </div>
 
-            {/* Content */}
-            <div className="flex-1 p-4">
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex-1 min-w-0">
+          {/* Content */}
+          <div className="flex-1 p-4">
+            <div className="flex items-start justify-between mb-2">
+              <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
                     {/* Facebook-specific info */}
                     {bookmark.platform === "Facebook" && (
@@ -163,131 +224,162 @@ export const BookmarkCard = ({
                             <AvatarFallback>
                               {bookmark.channel_name[0]}
                             </AvatarFallback>
-                          )}
+                    )}
                         </Avatar>
                         <span className="text-xs text-muted-foreground truncate">
-                          {bookmark.channel_name}
-                        </span>
-                      </div>
-                    )}
+                      {bookmark.channel_name}
+                    </span>
+                  </div>
+                )}
                   </div>
                   <h3 className="font-semibold text-sm line-clamp-2 mb-1">
                     {bookmark.title || "ไม่มีชื่อเรื่อง"}
                   </h3>
-                  
-                  {/* Description or Summary */}
-                  {(bookmark.user_description || bookmark.ai_summary) && (
-                    <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
-                      {bookmark.user_description || truncatedSummary}
-                    </p>
-                  )}
 
-                  {/* Tags */}
+                {/* Description or Summary */}
+                {(bookmark.user_description || bookmark.ai_summary) && (
+                  <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+                    {bookmark.user_description || truncatedSummary}
+                  </p>
+                )}
+
+                {/* Suggested tags */}
+                {bookmark.suggested_tags && bookmark.suggested_tags.length > 0 && (
                   <div className="flex flex-wrap gap-1 mb-2">
+                    {bookmark.suggested_tags.map((tag, index) => (
+                      <div key={index} className="flex items-center gap-1">
+                        <Badge 
+                          variant="secondary" 
+                          className="text-xs bg-purple-100 text-purple-700 border-purple-200"
+                        >
+                          {tag}
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 w-5 p-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAddSuggestedTag(tag);
+                          }}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* User tags */}
+                <div className="flex flex-wrap gap-1 mb-2">
                     {/* Platform tag (readonly/locked) */}
                     {bookmark.platform && (
                       <Badge variant="secondary" className="text-xs opacity-80 cursor-not-allowed" title="Platform tag (auto)">
                         {bookmark.platform}
                       </Badge>
                     )}
-                    {/* User tags (editable) */}
                     {bookmark.tags && bookmark.tags.map((tag, index) => (
-                      <Badge key={index} variant="secondary" className="text-xs">
-                        {tag}
-                      </Badge>
-                    ))}
-                    {bookmark.tags.length > 3 && (
-                      <Badge variant="outline" className="text-xs">
-                        +{bookmark.tags.length - 3}
-                      </Badge>
-                    )}
-                  </div>
-
-                  {/* Meta info */}
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {formatDate(bookmark.created_at)}
-                    </span>
-                    {bookmark.platform && (
-                      <Badge variant="outline" className="text-xs">
-                        {bookmark.platform}
-                      </Badge>
-                    )}
-                  </div>
+                      <Badge 
+                        key={index} 
+                        variant="secondary" 
+                        className="text-xs"
+                        style={getTagStyle(tag)}
+                      >
+                      {tag}
+                    </Badge>
+                  ))}
+                  {bookmark.tags.length > 3 && (
+                    <Badge variant="outline" className="text-xs">
+                      +{bookmark.tags.length - 3}
+                    </Badge>
+                  )}
                 </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-1 ml-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                {/* Meta info */}
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    {formatDate(bookmark.created_at)}
+                  </span>
+                  {bookmark.platform && (
+                    <Badge variant="outline" className="text-xs">
+                      {bookmark.platform}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-1 ml-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
                     onClick={(e) => { e.stopPropagation(); handleToggleFavorite(); }}
-                    className="h-8 w-8 p-0"
-                  >
-                    <Heart 
-                      className={`h-4 w-4 ${bookmark.is_favorite ? 'fill-red-500 text-red-500' : ''}`} 
-                    />
-                  </Button>
+                  className="h-8 w-8 p-0"
+                >
+                  <Heart 
+                    className={`h-4 w-4 ${bookmark.is_favorite ? 'fill-red-500 text-red-500' : ''}`} 
+                  />
+                </Button>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                <Button
+                  variant="ghost"
+                  size="sm"
                     onClick={(e) => { e.stopPropagation(); window.open(bookmark.url, '_blank'); }}
-                    className="h-8 w-8 p-0"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </Button>
+                  className="h-8 w-8 p-0"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </Button>
 
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem 
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem 
                         onClick={(e) => { e.stopPropagation(); setEditOpen(true); }}
                       >
                         แก้ไข
                       </DropdownMenuItem>
                       <DropdownMenuItem 
                         onClick={(e) => { e.stopPropagation(); setDeleteOpen(true); }}
-                        className="text-destructive"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        ลบ
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-
-              {/* AI Actions */}
-              <div className="flex justify-between items-center">
-                <AIButtons bookmark={bookmark} />
+                      className="text-destructive"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      ลบ
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
-          </div>
 
-          {/* Delete Dialog */}
-          <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>ยืนยันการลบ</AlertDialogTitle>
-                <AlertDialogDescription>
-                  คุณแน่ใจหรือไม่ที่จะลบลิงก์นี้? การดำเนินการนี้ไม่สามารถยกเลิกได้
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
+            {/* AI Actions */}
+            <div className="flex justify-between items-center">
+              <AIButtons bookmark={bookmark} />
+            </div>
+          </div>
+        </div>
+
+        {/* Delete Dialog */}
+        <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>ยืนยันการลบ</AlertDialogTitle>
+              <AlertDialogDescription>
+                คุณแน่ใจหรือไม่ที่จะลบลิงก์นี้? การดำเนินการนี้ไม่สามารถยกเลิกได้
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
                 <AlertDialogAction onClick={(e) => { e.stopPropagation(); handleDelete(); }} className="bg-destructive text-destructive-foreground">
-                  ลบ
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </Card>
+                ลบ
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </Card>
       </motion.div>
     );
   }
@@ -302,74 +394,74 @@ export const BookmarkCard = ({
         onClick={() => window.open(bookmark.url, '_blank')}
       >
         <Card className="h-full hover:shadow-lg transition-shadow group cursor-pointer">
-          {/* Thumbnail */}
-          <div className="relative w-full h-32 sm:h-40">
-            {bookmark.thumbnail_url ? (
-              <img 
-                src={bookmark.thumbnail_url} 
-                alt={bookmark.title || "Thumbnail"}
-                className="w-full h-full object-cover rounded-t-lg"
-              />
-            ) : (
-              <div className="w-full h-full bg-muted flex items-center justify-center rounded-t-lg">
-                <ExternalLink className="h-8 w-8 text-muted-foreground" />
-              </div>
-            )}
-            
-            {/* Platform badge */}
-            {bookmark.platform && (
-              <Badge 
-                className="absolute top-2 left-2 text-xs"
-                variant="secondary"
-              >
-                {bookmark.platform}
-              </Badge>
-            )}
+        {/* Thumbnail */}
+        <div className="relative w-full h-32 sm:h-40">
+          {bookmark.thumbnail_url ? (
+            <img 
+              src={bookmark.thumbnail_url} 
+              alt={bookmark.title || "Thumbnail"}
+              className="w-full h-full object-cover rounded-t-lg"
+            />
+          ) : (
+            <div className="w-full h-full bg-muted flex items-center justify-center rounded-t-lg">
+              <ExternalLink className="h-8 w-8 text-muted-foreground" />
+            </div>
+          )}
+          
+          {/* Platform badge */}
+          {bookmark.platform && (
+            <Badge 
+              className="absolute top-2 left-2 text-xs"
+              variant="secondary"
+            >
+              {bookmark.platform}
+            </Badge>
+          )}
 
-            {/* Actions overlay */}
-            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-              <Button
-                variant="secondary"
-                size="sm"
+          {/* Actions overlay */}
+          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+            <Button
+              variant="secondary"
+              size="sm"
                 onClick={(e) => { e.stopPropagation(); handleToggleFavorite(); }}
-                className="h-8 w-8 p-0"
-              >
-                <Heart 
-                  className={`h-4 w-4 ${bookmark.is_favorite ? 'fill-red-500 text-red-500' : ''}`} 
-                />
-              </Button>
+              className="h-8 w-8 p-0"
+            >
+              <Heart 
+                className={`h-4 w-4 ${bookmark.is_favorite ? 'fill-red-500 text-red-500' : ''}`} 
+              />
+            </Button>
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="secondary" size="sm" className="h-8 w-8 p-0">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem 
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="secondary" size="sm" className="h-8 w-8 p-0">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem 
                     onClick={(e) => { e.stopPropagation(); setEditOpen(true); }}
                   >
                     แก้ไข
                   </DropdownMenuItem>
                   <DropdownMenuItem 
                     onClick={(e) => { e.stopPropagation(); window.open(bookmark.url, '_blank'); }}
-                  >
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    เปิดลิงก์
-                  </DropdownMenuItem>
-                  <DropdownMenuItem 
+                >
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  เปิดลิงก์
+                </DropdownMenuItem>
+                <DropdownMenuItem 
                     onClick={(e) => { e.stopPropagation(); setDeleteOpen(true); }}
-                    className="text-destructive"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    ลบ
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+                  className="text-destructive"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  ลบ
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
+        </div>
 
-          <CardHeader className="p-3 pb-2">
+        <CardHeader className="p-3 pb-2">
             {/* Facebook-specific info */}
             {bookmark.platform === "Facebook" && (
               <div className="flex flex-col gap-1 mb-2">
@@ -378,7 +470,7 @@ export const BookmarkCard = ({
                     กลุ่ม: {bookmark.group_name}
                   </span>
                 )}
-                {bookmark.channel_name && (
+          {bookmark.channel_name && (
                   <span className="text-xs text-blue-600 dark:text-blue-200 truncate">
                     โพสต์โดย: {bookmark.channel_name}
                   </span>
@@ -387,7 +479,7 @@ export const BookmarkCard = ({
             )}
             {/* Default uploader/channel for other platforms */}
             {bookmark.platform !== "Facebook" && bookmark.channel_name && (
-              <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2">
                 <Avatar className="w-6 h-6">
                   {bookmark.channel_avatar ? (
                     <AvatarImage src={bookmark.channel_avatar} alt={bookmark.channel_name} />
@@ -395,16 +487,16 @@ export const BookmarkCard = ({
                     <AvatarFallback>
                       {bookmark.channel_name[0]}
                     </AvatarFallback>
-                  )}
+              )}
                 </Avatar>
-                <span className="text-xs text-muted-foreground truncate">
-                  {bookmark.channel_name}
-                </span>
-              </div>
-            )}
-            <CardTitle className="text-sm line-clamp-2 min-h-[2.5rem]">
-              {bookmark.title || "ไม่มีชื่อเรื่อง"}
-            </CardTitle>
+              <span className="text-xs text-muted-foreground truncate">
+                {bookmark.channel_name}
+              </span>
+            </div>
+          )}
+          <CardTitle className="text-sm line-clamp-2 min-h-[2.5rem]">
+            {bookmark.title || "ไม่มีชื่อเรื่อง"}
+          </CardTitle>
             {/* Facebook caption/description */}
             {bookmark.platform === "Facebook" && (
               <CardDescription className="text-xs line-clamp-2">
@@ -413,83 +505,115 @@ export const BookmarkCard = ({
             )}
             {/* Default description for other platforms */}
             {bookmark.platform !== "Facebook" && (bookmark.user_description || bookmark.ai_summary) && (
-              <CardDescription className="text-xs line-clamp-2">
-                {bookmark.user_description || truncatedSummary}
-              </CardDescription>
-            )}
-          </CardHeader>
+            <CardDescription className="text-xs line-clamp-2">
+              {bookmark.user_description || truncatedSummary}
+            </CardDescription>
+          )}
+        </CardHeader>
 
-          <CardContent className="p-3 pt-0">
-            {/* AI Summary Preview */}
-            {bookmark.ai_summary && (
-              <div className="mb-3 p-2 bg-purple-50 dark:bg-purple-950/20 rounded-md">
-                <div className="text-xs text-purple-700 dark:text-purple-300">
-                  {summaryExpanded ? bookmark.ai_summary : truncatedSummary}
-                </div>
-                {bookmark.ai_summary.length > 150 && (
+        <CardContent className="p-3 pt-0">
+          {/* AI Summary Preview */}
+          {bookmark.ai_summary && (
+            <div className="mb-3 p-2 bg-purple-50 dark:bg-purple-950/20 rounded-md">
+              <div className="text-xs text-purple-700 dark:text-purple-300">
+                {summaryExpanded ? bookmark.ai_summary : truncatedSummary}
+              </div>
+              {bookmark.ai_summary.length > 150 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSummaryExpanded(!summaryExpanded)}
+                  className="h-6 p-0 text-xs text-purple-600 hover:text-purple-700"
+                >
+                  {summaryExpanded ? (
+                    <>
+                      <EyeOff className="h-3 w-3 mr-1" />
+                      ย่อ
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="h-3 w-3 mr-1" />
+                      อ่านเพิ่ม
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* Suggested tags */}
+          {bookmark.suggested_tags && bookmark.suggested_tags.length > 0 && (
+            <div className="flex flex-wrap gap-1 mb-2">
+              {bookmark.suggested_tags.map((tag, index) => (
+                <div key={index} className="flex items-center gap-1">
+                  <Badge 
+                    variant="secondary" 
+                    className="text-xs bg-purple-100 text-purple-700 border-purple-200"
+                  >
+                    {tag}
+                  </Badge>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setSummaryExpanded(!summaryExpanded)}
-                    className="h-6 p-0 text-xs text-purple-600 hover:text-purple-700"
+                    className="h-5 w-5 p-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleAddSuggestedTag(tag);
+                    }}
                   >
-                    {summaryExpanded ? (
-                      <>
-                        <EyeOff className="h-3 w-3 mr-1" />
-                        ย่อ
-                      </>
-                    ) : (
-                      <>
-                        <Eye className="h-3 w-3 mr-1" />
-                        ดูเพิ่มเติม
-                      </>
-                    )}
+                    <Plus className="h-3 w-3" />
                   </Button>
-                )}
-              </div>
-            )}
-
-            {/* Tags */}
-            <div className="flex flex-wrap gap-1 mb-3">
-              {bookmark.tags.slice(0, 3).map((tag, index) => (
-                <Badge key={index} variant="secondary" className="text-xs">
-                  {tag}
-                </Badge>
+                </div>
               ))}
-              {bookmark.tags.length > 3 && (
-                <Badge variant="outline" className="text-xs">
-                  +{bookmark.tags.length - 3}
-                </Badge>
-              )}
             </div>
+          )}
 
-            {/* AI Actions and Date */}
-            <div className="flex justify-between items-center">
-              <AIButtons bookmark={bookmark} />
-              <span className="text-xs text-muted-foreground">
-                {formatDate(bookmark.created_at)}
-              </span>
-            </div>
-          </CardContent>
+          {/* Tags */}
+          <div className="flex flex-wrap gap-1 mb-2">
+            {bookmark.tags.slice(0, 3).map((tag, index) => (
+              <Badge 
+                key={index} 
+                variant="secondary" 
+                className="text-xs"
+                style={getTagStyle(tag)}
+              >
+                {tag}
+              </Badge>
+            ))}
+            {bookmark.tags.length > 3 && (
+              <Badge variant="outline" className="text-xs">
+                +{bookmark.tags.length - 3}
+              </Badge>
+            )}
+          </div>
 
-          {/* Delete Dialog */}
-          <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>ยืนยันการลบ</AlertDialogTitle>
-                <AlertDialogDescription>
-                  คุณแน่ใจหรือไม่ที่จะลบลิงก์นี้? การดำเนินการนี้ไม่สามารถยกเลิกได้
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
+          {/* AI Actions and Date */}
+          <div className="flex justify-between items-center">
+            <AIButtons bookmark={bookmark} />
+            <span className="text-xs text-muted-foreground">
+              {formatDate(bookmark.created_at)}
+            </span>
+          </div>
+        </CardContent>
+
+        {/* Delete Dialog */}
+        <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>ยืนยันการลบ</AlertDialogTitle>
+              <AlertDialogDescription>
+                คุณแน่ใจหรือไม่ที่จะลบลิงก์นี้? การดำเนินการนี้ไม่สามารถยกเลิกได้
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
                 <AlertDialogAction onClick={(e) => { e.stopPropagation(); handleDelete(); }} className="bg-destructive text-destructive-foreground">
-                  ลบ
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </Card>
+                ลบ
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </Card>
       </motion.div>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
@@ -500,7 +624,10 @@ export const BookmarkCard = ({
           </DialogHeader>
           <Form {...editForm}>
             <form onSubmit={editForm.handleSubmit(handleEditSubmit)} className="space-y-4">
-              <FormField name="title" control={editForm.control} rules={{ required: "กรุณากรอกชื่อเรื่อง" }}
+              <FormField 
+                name="title" 
+                control={editForm.control} 
+                rules={{ required: "กรุณากรอกชื่อเรื่อง" }}
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>ชื่อเรื่อง</FormLabel>
@@ -511,7 +638,9 @@ export const BookmarkCard = ({
                   </FormItem>
                 )}
               />
-              <FormField name="user_description" control={editForm.control}
+              <FormField 
+                name="user_description" 
+                control={editForm.control}
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>คำอธิบาย</FormLabel>
@@ -522,12 +651,21 @@ export const BookmarkCard = ({
                   </FormItem>
                 )}
               />
-              <FormField name="tags" control={editForm.control}
+              <FormField 
+                name="tags" 
+                control={editForm.control}
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>แท็ก (คั่นด้วย ,)</FormLabel>
+                    <FormLabel>แท็ก</FormLabel>
                     <FormControl>
-                      <Input placeholder="เช่น ข่าว,AI,เทคโนโลยี" {...field} />
+                      <TagInput 
+                        {...field}
+                        suggestions={tags}
+                        placeholder="เพิ่มแท็ก..."
+                        userId={user?.id}
+                        onTagsChange={fetchTags}
+                        returnType="array"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

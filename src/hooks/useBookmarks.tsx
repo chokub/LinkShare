@@ -120,7 +120,7 @@ export const useBookmarks = () => {
       const metadata = await extractMetadata(bookmarkData.url);
       if (metadata) {
         if (!bookmarkData.title || bookmarkData.title.trim() === "") {
-          finalTitle = metadata.title;
+        finalTitle = metadata.title;
         }
         finalDescription = metadata.description;
         finalThumbnail = metadata.thumbnail;
@@ -180,6 +180,69 @@ export const useBookmarks = () => {
     },
     onError: (error: any) => {
       console.error('Add bookmark error:', error);
+      toast({
+        title: "เกิดข้อผิดพลาด",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateBookmarkMutation = useMutation({
+    mutationFn: async ({ 
+      id, 
+      title, 
+      user_description, 
+      tags 
+    }: { 
+      id: string;
+      title?: string;
+      user_description?: string;
+      tags?: string[];
+    }) => {
+      if (!user) throw new Error("User not authenticated");
+
+      // Sync new tags to tags table
+      if (tags) {
+        const { data: existingTags } = await supabase
+          .from("tags")
+          .select("name")
+          .eq("user_id", user.id);
+
+        const existingTagNames = existingTags?.map(t => t.name) || [];
+        const newTags = tags.filter(tag => !existingTagNames.includes(tag));
+
+        if (newTags.length > 0) {
+          await supabase.from("tags").insert(
+            newTags.map(name => ({
+              name,
+              color: "#6366f1",
+              user_id: user.id
+            }))
+          );
+        }
+      }
+
+      const { error } = await supabase
+        .from("bookmarks")
+        .update({
+          ...(title !== undefined && { title }),
+          ...(user_description !== undefined && { user_description }),
+          ...(tags !== undefined && { tags })
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
+      toast({
+        title: "อัพเดทลิงก์สำเร็จ!",
+        description: "ข้อมูลลิงก์ได้รับการอัพเดทแล้ว",
+      });
+    },
+    onError: (error: any) => {
+      console.error('Update bookmark error:', error);
       toast({
         title: "เกิดข้อผิดพลาด",
         description: error.message,
@@ -255,6 +318,8 @@ export const useBookmarks = () => {
     isLoading,
     addBookmark: addBookmarkMutation.mutate,
     isAddingBookmark: addBookmarkMutation.isPending,
+    updateBookmark: updateBookmarkMutation.mutate,
+    isUpdatingBookmark: updateBookmarkMutation.isPending,
     toggleFavorite: toggleFavoriteMutation.mutate,
     deleteBookmark: deleteBookmarkMutation.mutate,
     isDeletingBookmark: deleteBookmarkMutation.isPending,
