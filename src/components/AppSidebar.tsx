@@ -36,7 +36,7 @@ export function AppSidebar({ onAddLinkClick, onFilterChange, selectedFilter, pla
     { title: "รายการโปรด", icon: Heart, value: "favorites" },
   ];
   // auto-generate platform menu
-  const platformIcons: Record<string, any> = {
+  const platformIcons: Record<string, React.ComponentType> = {
     YouTube: Bookmark,
     Instagram: Bookmark,
     TikTok: Bookmark,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -86,7 +86,7 @@ export const BookmarkCard = ({
     } 
   });
 
-  const fetchTags = async () => {
+  const fetchTags = useCallback(async () => {
     if (!user) return;
     const { data, error } = await supabase
       .from("tags")
@@ -94,11 +94,11 @@ export const BookmarkCard = ({
       .eq("user_id", user.id)
       .order("created_at", { ascending: true });
     if (!error) setTags(data);
-  };
+  }, [user]);
 
   useEffect(() => {
     fetchTags();
-  }, [user]);
+  }, [user, fetchTags]);
 
   const handleDelete = () => {
     deleteBookmark(bookmark.id);
@@ -143,7 +143,7 @@ export const BookmarkCard = ({
     editForm.reset({ title: bookmark.title || "", user_description: bookmark.user_description || "", tags: (bookmark.tags || []).join(",") });
   };
 
-  const handleEditSubmit = async (values: any) => {
+  const handleEditSubmit = async (values: { title: string; user_description: string; tags: string[] }) => {
     try {
       await updateBookmark({
         id: bookmark.id,

@@ -7,10 +7,10 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName?: string) => Promise<{ error: any }>;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
-  signInWithGoogle: () => Promise<{ error: any }>;
+  signInWithGoogle: () => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -127,14 +127,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       return { error };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Signup exception:', error);
       toast({
         title: "เกิดข้อผิดพลาด",
         description: "ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้",
         variant: "destructive",
       });
-      return { error };
+      return { error: error as Error };
     } finally {
       setLoading(false);
     }
@@ -169,14 +169,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       return { error };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Signin exception:', error);
       toast({
         title: "เกิดข้อผิดพลาด",
         description: "ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้",
         variant: "destructive",
       });
-      return { error };
+      return { error: error as Error };
     } finally {
       setLoading(false);
     }
@@ -198,7 +198,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         let errorMessage = "ไม่สามารถเข้าสู่ระบบด้วย Google ได้";
         
         if (error.message.includes('provider is not enabled')) {
-          errorMessage = "การเข้าสู่ระบบด้วย Google ยังไม่เปิดใช้งาน กรุณาใช้อีเมล/รหัsผ่าน";
+          errorMessage = "การเข้าสู่ระบบด้วย Google ยังไม่เปิดใช้งาน กรุณาใช้อีเมล/รหัสผ่าน";
         }
         
         toast({
@@ -209,14 +209,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       return { error };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Google signin exception:', error);
       toast({
         title: "เกิดข้อผิดพลาด",
         description: "ไม่สามารถเชื่อมต่อกับ Google ได้",
         variant: "destructive",
       });
-      return { error };
+      return { error: error as Error };
     } finally {
       setLoading(false);
     }

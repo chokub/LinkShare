@@ -20,12 +20,13 @@ import { X, Edit2, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { TagInput } from "@/components/ui/tag-input";
+import { toast } from "@/components/ui/use-toast";
 
 // ฟังก์ชันใหม่: autoDetectPlatform (แทน detectPlatformFromUrl)
 function autoDetectPlatform(url: string): string {
   try {
     const { hostname } = new URL(url);
-    let domain = hostname.replace(/^www\./, "");
+    const domain = hostname.replace(/^www\./, "");
     const parts = domain.split(".");
     let platform = "";
     if (parts.length >= 2) {
@@ -102,6 +103,15 @@ const Dashboard = () => {
   });
 
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  const extractDomain = (url: string) => {
+    try {
+      const domain = new URL(url).hostname;
+      return domain.replace('www.', '');
+    } catch {
+      return url;
+    }
+  };
 
   // ฟังก์ชันดึง oEmbed จาก YouTube
   async function fetchYoutubeOembed(url: string) {
@@ -233,7 +243,7 @@ const Dashboard = () => {
     }, 400);
   };
 
-  const onSubmit = async (values: any) => {
+  const onSubmit = async (values: { url: string; title: string; user_description?: string; tags?: string[] }) => {
     await new Promise((resolve) => setTimeout(resolve, 200)); // for UX
     // ถ้า metadata.platform ไม่มี หรือเป็น Other ให้ auto detect
     const platformTag = (
@@ -269,7 +279,7 @@ const Dashboard = () => {
     fetchTags();
   };
 
-  const fetchTags = async () => {
+  const fetchTags = useCallback(async () => {
     setTagLoading(true);
     const { data, error } = await supabase
       .from("tags")
@@ -278,15 +288,15 @@ const Dashboard = () => {
       .order("created_at", { ascending: true });
     setTagLoading(false);
     if (!error) setTags(data);
-  };
+  }, [user?.id]);
 
   useEffect(() => {
     if (user) fetchTags();
-  }, [user]);
+  }, [user, fetchTags]);
 
   useEffect(() => {
     if (tagDialogOpen && user) fetchTags();
-  }, [tagDialogOpen, user]);
+  }, [tagDialogOpen, user, fetchTags]);
 
   const handleAddTag = async (values) => {
     if (!values.name) return;

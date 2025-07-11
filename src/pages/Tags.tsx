@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -96,7 +96,7 @@ const Tags = () => {
   const [selectedTextColor, setSelectedTextColor] = useState(TEXT_COLORS[0]);
   const tagForm = useForm({ defaultValues: { name: "" } });
 
-  const fetchTags = async () => {
+  const fetchTags = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     const { data, error } = await supabase
@@ -106,9 +106,9 @@ const Tags = () => {
       .order("created_at", { ascending: true });
     setLoading(false);
     if (!error) setTags(data);
-  };
+  }, [user]);
 
-  useEffect(() => { fetchTags(); }, [user]);
+  useEffect(() => { fetchTags(); }, [user, fetchTags]);
 
   const handleAddTag = async (values) => {
     if (!values.name) return;

@@ -178,7 +178,7 @@ export const useBookmarks = () => {
         description: "ลิงก์ได้ถูกเพิ่มเข้าคอลเลกชันแล้ว",
       });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       console.error('Add bookmark error:', error);
       toast({
         title: "เกิดข้อผิดพลาด",
@@ -241,7 +241,7 @@ export const useBookmarks = () => {
         description: "ข้อมูลลิงก์ได้รับการอัพเดทแล้ว",
       });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       console.error('Update bookmark error:', error);
       toast({
         title: "เกิดข้อผิดพลาด",
@@ -257,7 +257,7 @@ export const useBookmarks = () => {
       ai_summary?: string; 
       suggested_tags?: string[] 
     }) => {
-      const updateData: any = {};
+      const updateData: Record<string, string | string[]> = {};
       if (ai_summary !== undefined) updateData.ai_summary = ai_summary;
       if (suggested_tags !== undefined) updateData.suggested_tags = suggested_tags;
 
@@ -303,7 +303,7 @@ export const useBookmarks = () => {
         description: "ลิงก์ได้ถูกลบออกจากคอลเลกชันแล้ว",
       });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       console.error('Delete bookmark error:', error);
       toast({
         title: "เกิดข้อผิดพลาด",
