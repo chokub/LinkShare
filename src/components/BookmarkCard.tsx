@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,10 +7,12 @@ import {
   ExternalLink, 
   MoreVertical, 
   Trash2,
+  Plus,
+  X,
+  Calendar,
   Eye,
   EyeOff,
-  Calendar,
-  Plus
+  Check
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -40,7 +42,8 @@ import { useForm } from "react-hook-form";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { TagInput } from "@/components/ui/tag-input";
+import { useNavigate } from "react-router-dom";
+import { FaInstagram, FaFacebook, FaTwitter, FaYoutube, FaTiktok, FaLinkedin, FaDiscord, FaGithub, FaGlobe } from "react-icons/fa";
 
 interface BookmarkCardProps {
   bookmark: {
@@ -58,69 +61,127 @@ interface BookmarkCardProps {
     platform: string | null;
     is_favorite: boolean | null;
     created_at: string;
-    user_id?: string;
     group_name?: string;
     caption?: string;
   };
   cardSize?: string;
   viewMode?: "grid" | "list";
+  editTagMode?: boolean;
+  tags: Array<{ id: string; name: string; color: string; textColor: string }>;
+  onTagCreated?: (newTag: { name: string; color: string; textColor: string }) => void;
+  draggingTag?: { name: string; color: string; textColor: string } | null;
+  dragPos?: { x: number; y: number } | null;
 }
 
 export const BookmarkCard = ({ 
   bookmark, 
   cardSize = "scale-100",
-  viewMode = "grid"
+  viewMode = "grid",
+  editTagMode = false,
+  tags,
+  onTagCreated,
+  draggingTag,
+  dragPos
 }: BookmarkCardProps) => {
   const { toggleFavorite, deleteBookmark, updateBookmark } = useBookmarks();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [uploader, setUploader] = useState<{ avatar_url: string | null, full_name: string | null } | null>(null);
-  const [tags, setTags] = useState<Array<{ id: string; name: string; color: string; textColor: string }>>([]);
   const { user } = useAuth();
   const editForm = useForm({ 
     defaultValues: { 
       title: bookmark.title || "", 
       user_description: bookmark.user_description || "", 
-      tags: bookmark.tags || []  // Array of tags
+      tags: bookmark.tags || []
     } 
   });
+  const [newTagName, setNewTagName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [showCreateTagDialog, setShowCreateTagDialog] = useState(false);
+  const navigate = useNavigate();
+  const [isDragOver, setIsDragOver] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [isMouseOverDrag, setIsMouseOverDrag] = useState(false);
+  const [glow, setGlow] = useState(() => localStorage.getItem('cardGlowGradient'));
+  const isMouseOverDragRef = useRef(isMouseOverDrag);
+  useEffect(() => { isMouseOverDragRef.current = isMouseOverDrag; }, [isMouseOverDrag]);
+  const draggingTagRef = useRef(draggingTag);
+  useEffect(() => { draggingTagRef.current = draggingTag; }, [draggingTag]);
 
-  const fetchTags = async () => {
-    if (!user) return;
-    const { data, error } = await supabase
-      .from("tags")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: true });
-    if (!error) setTags(data);
-  };
-
+  // Register pointerup handler แค่รอบเดียว
   useEffect(() => {
-    fetchTags();
-  }, [user]);
+    const handlePointerUp = () => {
+      if (isMouseOverDragRef.current && draggingTagRef.current) {
+        if (!Array.isArray(bookmark.tags) || !bookmark.tags.includes(draggingTagRef.current.name)) {
+          handleAddTagToBookmark(draggingTagRef.current.name);
+        }
+      }
+    };
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => window.removeEventListener('pointerup', handlePointerUp);
+  }, [bookmark.tags]);
 
-  const handleDelete = () => {
-    deleteBookmark(bookmark.id);
-  };
+  // Sync glow if changed in another tab
+  useEffect(() => {
+    const onStorage = () => setGlow(localStorage.getItem('cardGlowGradient'));
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
-  const handleToggleFavorite = () => {
-    toggleFavorite({ id: bookmark.id, isFavorite: bookmark.is_favorite || false });
-  };
+  // เช็ค mouse position กับ bounding box ขณะ drag tag
+  useEffect(() => {
+    if (!draggingTag || !dragPos) {
+      setIsMouseOverDrag(false);
+      return;
+    }
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const isOver =
+      dragPos.x >= rect.left &&
+      dragPos.x <= rect.right &&
+      dragPos.y >= rect.top &&
+      dragPos.y <= rect.bottom;
+    setIsMouseOverDrag(isOver);
+    // debug log
+    // console.log('BookmarkCard', bookmark.title, { dragPos, rect, isOver, draggingTag });
+  }, [dragPos, draggingTag]);
 
-  const handleAddSuggestedTag = async (tagToAdd: string) => {
-    const currentTags = bookmark.tags || [];
-    if (!currentTags.includes(tagToAdd)) {
-      const newTags = [...currentTags, tagToAdd];
+  // Remove tag from bookmark
+  const handleRemoveTag = async (tagToRemove: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const newTags = (bookmark.tags || []).filter(t => t !== tagToRemove);
       try {
         await updateBookmark({
           id: bookmark.id,
           tags: newTags
         });
       } catch (error) {
-        console.error('Failed to add suggested tag:', error);
-      }
+      console.error('Failed to remove tag:', error);
     }
+  };
+
+  // Minimal tag creation and add to bookmark
+  const handleCreateAndAddTag = async () => {
+    const tagName = newTagName.trim();
+    if (!tagName) return;
+    if (tags.some(t => t.name.trim().toLowerCase() === tagName.trim().toLowerCase())) return;
+    setCreating(true);
+    try {
+      const { data, error } = await supabase
+        .from("tags")
+        .insert({ name: tagName, user_id: user.id })
+        .select()
+        .single();
+      if (!error && data) {
+        const newTags = Array.isArray(bookmark.tags) ? [...bookmark.tags, tagName] : [tagName];
+        await updateBookmark({ id: bookmark.id, tags: newTags });
+        setNewTagName("");
+        setShowCreateTagDialog(false);
+      }
+    } catch (e) {
+      // handle error
+    }
+    setCreating(false);
   };
 
   const formatDate = (dateString: string) => {
@@ -149,7 +210,7 @@ export const BookmarkCard = ({
         id: bookmark.id,
         title: values.title,
         user_description: values.user_description,
-        tags: values.tags // Array of tags
+        tags: values.tags
       });
       setEditOpen(false);
     } catch (error) {
@@ -169,6 +230,134 @@ export const BookmarkCard = ({
     return undefined;
   };
 
+  const COLOR_PRESETS = [
+    { bg: "#2563eb", text: "#ffffff", name: "น้ำเงิน" },
+    { bg: "#1d4ed8", text: "#ffffff", name: "น้ำเงินเข้ม" },
+    { bg: "#3b82f6", text: "#ffffff", name: "น้ำเงินสว่าง" },
+    { bg: "#60a5fa", text: "#000000", name: "ฟ้า" },
+    { bg: "#93c5fd", text: "#000000", name: "ฟ้าอ่อน" },
+    { bg: "#16a34a", text: "#ffffff", name: "เขียว" },
+    { bg: "#15803d", text: "#ffffff", name: "เขียวเข้ม" },
+    { bg: "#22c55e", text: "#000000", name: "เขียวสด" },
+    { bg: "#4ade80", text: "#000000", name: "เขียวอ่อน" },
+    { bg: "#86efac", text: "#000000", name: "เขียวพาสเทล" },
+    { bg: "#dc2626", text: "#ffffff", name: "แดง" },
+    { bg: "#b91c1c", text: "#ffffff", name: "แดงเข้ม" },
+    { bg: "#ef4444", text: "#ffffff", name: "แดงสด" },
+    { bg: "#f87171", text: "#000000", name: "แดงอ่อน" },
+    { bg: "#fca5a5", text: "#000000", name: "แดงพาสเทล" },
+    { bg: "#ca8a04", text: "#000000", name: "เหลือง" },
+    { bg: "#a16207", text: "#ffffff", name: "เหลืองเข้ม" },
+    { bg: "#eab308", text: "#000000", name: "เหลืองสด" },
+    { bg: "#facc15", text: "#000000", name: "เหลืองสว่าง" },
+    { bg: "#fde047", text: "#000000", name: "เหลืองอ่อน" },
+    { bg: "#9333ea", text: "#ffffff", name: "ม่วง" },
+    { bg: "#7e22ce", text: "#ffffff", name: "ม่วงเข้ม" },
+    { bg: "#a855f7", text: "#ffffff", name: "ม่วงสด" },
+    { bg: "#c084fc", text: "#000000", name: "ม่วงอ่อน" },
+    { bg: "#d8b4fe", text: "#000000", name: "ม่วงพาสเทล" },
+    { bg: "#ea580c", text: "#ffffff", name: "ส้ม" },
+    { bg: "#c2410c", text: "#ffffff", name: "ส้มเข้ม" },
+    { bg: "#f97316", text: "#ffffff", name: "ส้มสด" },
+    { bg: "#fb923c", text: "#000000", name: "ส้มอ่อน" },
+    { bg: "#fdba74", text: "#000000", name: "ส้มพาสเทล" },
+    { bg: "#db2777", text: "#ffffff", name: "ชมพู" },
+    { bg: "#be185d", text: "#ffffff", name: "ชมพูเข้ม" },
+    { bg: "#ec4899", text: "#ffffff", name: "ชมพูสด" },
+    { bg: "#f472b6", text: "#000000", name: "ชมพูอ่อน" },
+    { bg: "#f9a8d4", text: "#000000", name: "ชมพูพาสเทล" },
+    { bg: "#1e293b", text: "#ffffff", name: "กรมท่า" },
+    { bg: "#334155", text: "#ffffff", name: "เทาเข้ม" },
+    { bg: "#475569", text: "#ffffff", name: "เทา" },
+    { bg: "#64748b", text: "#ffffff", name: "เทากลาง" },
+    { bg: "#94a3b8", text: "#000000", name: "เทาอ่อน" }
+  ];
+  const TEXT_COLORS = [
+    { value: "#ffffff", name: "ขาว" },
+    { value: "#000000", name: "ดำ" },
+    { value: "#64748b", name: "เทา" },
+    { value: "#2563eb", name: "น้ำเงิน" },
+    { value: "#16a34a", name: "เขียว" },
+    { value: "#dc2626", name: "แดง" },
+    { value: "#ca8a04", name: "เหลือง" },
+    { value: "#9333ea", name: "ม่วง" },
+    { value: "#f97316", name: "ส้ม" },
+    { value: "#ec4899", name: "ชมพู" },
+  ];
+  const [selectedColor, setSelectedColor] = useState(COLOR_PRESETS[0]);
+  const [selectedTextColor, setSelectedTextColor] = useState(TEXT_COLORS[0]);
+
+  // Update handleCreateTagFromEditForm to use color and textColor
+  const handleCreateTagFromEditForm = async () => {
+    const tagName = newTagName.trim();
+    if (!tagName) return;
+    if (tags.some(t => t.name.trim().toLowerCase() === tagName.toLowerCase())) return;
+    setCreating(true);
+    // Optimistic UI: add tag immediately (deduplicate)
+    const prevTags = editForm.getValues("tags") || [];
+    if (!prevTags.some(t => t.toLowerCase() === tagName.toLowerCase())) {
+      editForm.setValue("tags", [...prevTags, tagName]);
+    }
+    setNewTagName("");
+    setShowCreateTagDialog(false);
+    setSelectedColor(COLOR_PRESETS[0]);
+    setSelectedTextColor(TEXT_COLORS[0]);
+    try {
+      const { data, error } = await supabase
+        .from("tags")
+        .insert({ name: tagName, color: selectedColor.bg, textColor: selectedTextColor.value, user_id: user.id })
+        .select()
+        .single();
+      if (error) {
+        // Rollback if error
+        editForm.setValue("tags", prevTags);
+        alert('เกิดข้อผิดพลาด: ' + error.message);
+      } else if (!error && data) {
+        // Deduplicate again after insert
+        const currentTags = editForm.getValues("tags") || [];
+        if (!currentTags.some(t => t.toLowerCase() === tagName.toLowerCase())) {
+          editForm.setValue("tags", [...currentTags, tagName]);
+        }
+        setNewTagName("");
+        setShowCreateTagDialog(false);
+        setSelectedColor(COLOR_PRESETS[0]);
+        setSelectedTextColor(TEXT_COLORS[0]);
+        if (typeof onTagCreated === 'function') {
+          onTagCreated({ name: tagName, color: selectedColor.bg, textColor: selectedTextColor.value });
+        }
+      }
+    } catch (e) {
+      editForm.setValue("tags", prevTags);
+      alert('เกิดข้อผิดพลาด: ' + (e.message || e));
+    }
+    setCreating(false);
+  };
+
+  const handleAddTagToBookmark = async (tagName: string) => {
+    if (!tagName) return;
+    if (Array.isArray(bookmark.tags) && bookmark.tags.includes(tagName)) return;
+    try {
+      const newTags = [...(bookmark.tags || []), tagName];
+      console.log('DEBUG: updateBookmark', bookmark.id, newTags);
+      await updateBookmark({ id: bookmark.id, tags: newTags });
+    } catch (e) { console.error('DEBUG: updateBookmark error', e); }
+  };
+
+  // Helper สำหรับเลือก icon ตาม platform
+  const getPlatformIcon = (platform: string | null, size = 48) => {
+    switch ((platform || "").toLowerCase()) {
+      case "instagram": return <FaInstagram size={size} color="#E1306C" />;
+      case "facebook": return <FaFacebook size={size} color="#1877F3" />;
+      case "twitter": return <FaTwitter size={size} color="#1DA1F2" />;
+      case "youtube": return <FaYoutube size={size} color="#FF0000" />;
+      case "tiktok": return <FaTiktok size={size} color="#000000" />;
+      case "linkedin": return <FaLinkedin size={size} color="#0A66C2" />;
+      case "discord": return <FaDiscord size={size} color="#5865F2" />;
+      case "github": return <FaGithub size={size} color="#333" />;
+      default: return <FaGlobe size={size} color="#64748b" />;
+    }
+  };
+
   if (viewMode === "list") {
     return (
       <motion.div
@@ -177,19 +366,23 @@ export const BookmarkCard = ({
         className="h-full"
         onClick={() => window.open(bookmark.url, '_blank')}
       >
-        <Card className="w-full hover:shadow-md transition-shadow cursor-pointer">
+        <Card
+          className="w-full hover:shadow-md transition-shadow cursor-pointer"
+          style={glow ? { boxShadow: `0 0 0 4px #000, 0 0 16px 4px #0008, 0 0 0 6px ${glow}` } : {}}
+        >
         <div className="flex flex-col sm:flex-row">
           {/* Thumbnail */}
           <div className="w-full sm:w-48 h-32 sm:h-24 flex-shrink-0">
-            {bookmark.thumbnail_url ? (
+            {bookmark.thumbnail_url && !bookmark.thumbnail_url.includes("photo-1611224923853-80b023f02d71") ? (
               <img 
                 src={bookmark.thumbnail_url} 
                 alt={bookmark.title || "Thumbnail"}
                 className="w-full h-full object-cover rounded-t-lg sm:rounded-l-lg sm:rounded-t-none"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
               />
             ) : (
-              <div className="w-full h-full bg-muted flex items-center justify-center rounded-t-lg sm:rounded-l-lg sm:rounded-t-none">
-                <ExternalLink className="h-8 w-8 text-muted-foreground" />
+              <div className="w-full h-full flex items-center justify-center bg-muted rounded-t-lg sm:rounded-l-lg sm:rounded-t-none">
+                {getPlatformIcon(bookmark.platform, 48)}
               </div>
             )}
           </div>
@@ -233,7 +426,9 @@ export const BookmarkCard = ({
                 )}
                   </div>
                   <h3 className="font-semibold text-sm line-clamp-2 mb-1">
-                    {bookmark.title || "ไม่มีชื่อเรื่อง"}
+                    {bookmark.title && !bookmark.title.startsWith("ไม่สามารถดึงข้อมูล") && bookmark.title !== "ไม่มีชื่อเรื่อง"
+                      ? bookmark.title
+                      : (bookmark.platform || "ลิงก์")}
                   </h3>
 
                 {/* Description or Summary */}
@@ -260,7 +455,7 @@ export const BookmarkCard = ({
                           className="h-5 w-5 p-0"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleAddSuggestedTag(tag);
+                            // handleAddSuggestedTag(tag); // ลบบรรทัดนี้เนื่องจากรับ tags จาก props
                           }}
                         >
                           <Plus className="h-3 w-3" />
@@ -278,7 +473,7 @@ export const BookmarkCard = ({
                         {bookmark.platform}
                       </Badge>
                     )}
-                    {bookmark.tags && bookmark.tags.map((tag, index) => (
+                    {(Array.isArray(bookmark.tags) ? bookmark.tags : []).filter(tag => tags.some(t => t.name === tag)).map((tag, index) => (
                       <Badge 
                         key={index} 
                         variant="secondary" 
@@ -288,7 +483,7 @@ export const BookmarkCard = ({
                       {tag}
                     </Badge>
                   ))}
-                  {bookmark.tags.length > 3 && (
+                  {Array.isArray(bookmark.tags) && bookmark.tags.length > 3 && (
                     <Badge variant="outline" className="text-xs">
                       +{bookmark.tags.length - 3}
                     </Badge>
@@ -314,7 +509,7 @@ export const BookmarkCard = ({
                 <Button
                   variant="ghost"
                   size="sm"
-                    onClick={(e) => { e.stopPropagation(); handleToggleFavorite(); }}
+                    onClick={(e) => { e.stopPropagation(); toggleFavorite({ id: bookmark.id, isFavorite: bookmark.is_favorite || false }); }}
                   className="h-8 w-8 p-0"
                 >
                   <Heart 
@@ -373,7 +568,7 @@ export const BookmarkCard = ({
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-                <AlertDialogAction onClick={(e) => { e.stopPropagation(); handleDelete(); }} className="bg-destructive text-destructive-foreground">
+                <AlertDialogAction onClick={(e) => { e.stopPropagation(); deleteBookmark(bookmark.id); }} className="bg-destructive text-destructive-foreground">
                 ลบ
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -386,25 +581,43 @@ export const BookmarkCard = ({
 
   // Grid view (existing code with improvements)
   return (
-    <div className={`transform transition-transform ${cardSize}`}>
+    <div className={`transform transition-transform ${cardSize}`} ref={cardRef}>
       <motion.div
         whileHover={{ scale: 1.03, boxShadow: "0 4px 24px rgba(80,80,160,0.10)" }}
         whileTap={{ scale: 0.98 }}
-        className="h-full"
+        className={`h-full transition-all ${(isMouseOverDrag) ? 'card-glow-anim scale-105 shadow-xl' : ''}`}
         onClick={() => window.open(bookmark.url, '_blank')}
+        // ไม่ใช้ onDrop/onDragOver/onDragEnter/onDragLeave อีกต่อไป
       >
-        <Card className="h-full hover:shadow-lg transition-shadow group cursor-pointer">
+        <Card
+          className="h-full hover:shadow-lg transition-shadow group cursor-pointer relative"
+          style={glow ? { boxShadow: `0 0 0 4px #000, 0 0 16px 4px #0008, 0 0 0 6px ${glow}` } : {}}
+        >
+          {/* ปุ่มลบแบบถังขยะในโหมดแก้ไข */}
+          {editTagMode && (
+            <Button
+              type="button"
+              variant="destructive"
+              size="icon"
+              className="absolute top-2 right-2 z-20 shadow-md"
+              onClick={e => { e.stopPropagation(); setDeleteOpen(true); }}
+              title="ลบลิงก์นี้"
+            >
+              <Trash2 className="h-5 w-5" />
+            </Button>
+          )}
         {/* Thumbnail */}
         <div className="relative w-full h-32 sm:h-40">
-          {bookmark.thumbnail_url ? (
+          {bookmark.thumbnail_url && !bookmark.thumbnail_url.includes("photo-1611224923853-80b023f02d71") ? (
             <img 
               src={bookmark.thumbnail_url} 
               alt={bookmark.title || "Thumbnail"}
               className="w-full h-full object-cover rounded-t-lg"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
           ) : (
-            <div className="w-full h-full bg-muted flex items-center justify-center rounded-t-lg">
-              <ExternalLink className="h-8 w-8 text-muted-foreground" />
+            <div className="w-full h-full flex items-center justify-center bg-muted rounded-t-lg">
+              {getPlatformIcon(bookmark.platform, 56)}
             </div>
           )}
           
@@ -423,7 +636,7 @@ export const BookmarkCard = ({
             <Button
               variant="secondary"
               size="sm"
-                onClick={(e) => { e.stopPropagation(); handleToggleFavorite(); }}
+                onClick={(e) => { e.stopPropagation(); toggleFavorite({ id: bookmark.id, isFavorite: bookmark.is_favorite || false }); }}
               className="h-8 w-8 p-0"
             >
               <Heart 
@@ -495,7 +708,9 @@ export const BookmarkCard = ({
             </div>
           )}
           <CardTitle className="text-sm line-clamp-2 min-h-[2.5rem]">
-            {bookmark.title || "ไม่มีชื่อเรื่อง"}
+            {bookmark.title && !bookmark.title.startsWith("ไม่สามารถดึงข้อมูล") && bookmark.title !== "ไม่มีชื่อเรื่อง"
+              ? bookmark.title
+              : (bookmark.platform || "ลิงก์")}
           </CardTitle>
             {/* Facebook caption/description */}
             {bookmark.platform === "Facebook" && (
@@ -558,7 +773,7 @@ export const BookmarkCard = ({
                     className="h-5 w-5 p-0"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleAddSuggestedTag(tag);
+                      // handleAddSuggestedTag(tag); // ลบบรรทัดนี้เนื่องจากรับ tags จาก props
                     }}
                   >
                     <Plus className="h-3 w-3" />
@@ -570,7 +785,7 @@ export const BookmarkCard = ({
 
           {/* Tags */}
           <div className="flex flex-wrap gap-1 mb-2">
-            {bookmark.tags.slice(0, 3).map((tag, index) => (
+            {(Array.isArray(bookmark.tags) ? bookmark.tags.slice(0, 3) : []).map((tag, index) => (
               <Badge 
                 key={index} 
                 variant="secondary" 
@@ -578,14 +793,167 @@ export const BookmarkCard = ({
                 style={getTagStyle(tag)}
               >
                 {tag}
+                {editTagMode && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 w-5 p-0 ml-1"
+                    onClick={(e) => handleRemoveTag(tag, e)}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                )}
               </Badge>
             ))}
-            {bookmark.tags.length > 3 && (
+            {Array.isArray(bookmark.tags) && bookmark.tags.length > 3 && (
               <Badge variant="outline" className="text-xs">
                 +{bookmark.tags.length - 3}
               </Badge>
             )}
           </div>
+          {editTagMode && (
+            <>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 p-0 rounded-full border border-green-500 bg-green-100 text-green-600 hover:bg-green-500 hover:text-white transition"
+                    title="เพิ่มแท็ก"
+                    style={{ boxShadow: "0 2px 8px rgba(34,197,94,0.15)" }}
+                  >
+                    <Plus className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-[180px]">
+                  <DropdownMenuItem disabled className="font-semibold text-xs opacity-70 cursor-default select-none">
+                    เลือกแท็กที่มีอยู่
+                  </DropdownMenuItem>
+                  {tags.filter(t => Array.isArray(bookmark.tags) ? !bookmark.tags.includes(t.name) : true).map(t => (
+                    <DropdownMenuItem
+                      key={t.id}
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const newTags = Array.isArray(bookmark.tags) ? [...bookmark.tags, t.name] : [t.name];
+                        try {
+                          await updateBookmark({
+                            id: bookmark.id,
+                            tags: newTags
+                          });
+                        } catch (error) {
+                          console.error('Failed to add tag:', error);
+                        }
+                      }}
+                    >
+                      <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ background: t.color || '#6366f1' }} />
+                      {t.name}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuItem
+                    onClick={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowCreateTagDialog(true);
+                    }}
+                    className="font-semibold text-green-600 hover:bg-green-50 cursor-pointer mt-1"
+                  >
+                    <Plus className="h-4 w-4 mr-1" /> เพิ่มแท็กใหม่
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {/* Dialog สำหรับสร้างแท็กใหม่ (ฟอร์มเต็มรูปแบบ) */}
+              <Dialog open={showCreateTagDialog} onOpenChange={setShowCreateTagDialog}>
+                <DialogContent onClick={e => e.stopPropagation()}>
+                  <DialogHeader>
+                    <DialogTitle>สร้างแท็กใหม่</DialogTitle>
+                    <DialogDescription>
+                      ตั้งชื่อแท็ก เลือกสีพื้นหลังและสีตัวอักษร พร้อมดูตัวอย่าง
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <Input
+                      placeholder="เช่น ข่าว, AI, เทคโนโลยี"
+                      value={newTagName}
+                      onChange={e => setNewTagName(e.target.value)}
+                    />
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {/* เลือกสีพื้นหลัง */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium">สีพื้นหลัง</label>
+                        <div className="grid grid-cols-5 gap-2 max-h-[200px] overflow-y-auto p-2 border rounded-lg">
+                          {COLOR_PRESETS.map((color) => (
+                            <button
+                              key={color.bg}
+                              type="button"
+                              onClick={() => setSelectedColor(color)}
+                              className={`relative aspect-square rounded-md transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${selectedColor.bg === color.bg ? 'ring-2 ring-blue-500' : ''}`}
+                              style={{ background: color.bg }}
+                              title={color.name}
+                            >
+                              {selectedColor.bg === color.bg && (
+                                <Check className={`absolute inset-0 m-auto h-4 w-4 ${color.text === '#000000' ? 'text-black' : 'text-white'}`} />
+                              )}
+                              <span className="sr-only">{color.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* เลือกสีตัวอักษร */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium">สีตัวอักษร</label>
+                        <div className="grid grid-cols-5 gap-2 p-2 border rounded-lg">
+                          {TEXT_COLORS.map((color) => (
+                            <button
+                              key={color.value}
+                              type="button"
+                              onClick={() => setSelectedTextColor(color)}
+                              className={`relative aspect-square rounded-md transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border ${selectedTextColor.value === color.value ? 'ring-2 ring-blue-500' : ''}`}
+                              style={{ 
+                                background: color.value === '#ffffff' ? '#f3f4f6' : color.value,
+                                borderColor: color.value === '#ffffff' ? '#e5e7eb' : 'transparent'
+                              }}
+                              title={color.name}
+                            >
+                              {selectedTextColor.value === color.value && (
+                                <Check className={`absolute inset-0 m-auto h-4 w-4 ${color.value === '#ffffff' || color.value === '#f3f4f6' ? 'text-black' : 'text-white'}`} />
+                              )}
+                              <span className="sr-only">{color.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    {/* ตัวอย่างแท็ก */}
+                    <div className="pt-2">
+                      <label className="block text-sm font-medium mb-2">ตัวอย่าง</label>
+                      <Badge 
+                        style={{ 
+                          background: selectedColor.bg,
+                          color: selectedTextColor.value,
+                        }}
+                        className="font-semibold"
+                      >
+                        {newTagName || "ตัวอย่างแท็ก"}
+                      </Badge>
+                    </div>
+                    <Button
+                      onClick={handleCreateTagFromEditForm}
+                      disabled={!newTagName.trim() || tags.some(t => t.name.trim().toLowerCase() === newTagName.trim().toLowerCase()) || creating}
+                      className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                    >
+                      {creating ? <span className="animate-spin mr-2">⏳</span> : null}
+                      เพิ่ม
+                    </Button>
+                    {tags.some(t => t.name.trim().toLowerCase() === newTagName.trim().toLowerCase()) && (
+                      <div className="text-xs text-red-500 mt-2">มีแท็กนี้อยู่แล้ว</div>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
 
           {/* AI Actions and Date */}
           <div className="flex justify-between items-center">
@@ -607,7 +975,7 @@ export const BookmarkCard = ({
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-                <AlertDialogAction onClick={(e) => { e.stopPropagation(); handleDelete(); }} className="bg-destructive text-destructive-foreground">
+                <AlertDialogAction onClick={(e) => { e.stopPropagation(); deleteBookmark(bookmark.id); }} className="bg-destructive text-destructive-foreground">
                 ลบ
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -657,22 +1025,202 @@ export const BookmarkCard = ({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>แท็ก</FormLabel>
-                    <FormControl>
-                      <TagInput 
-                        {...field}
-                        suggestions={tags}
-                        placeholder="เพิ่มแท็ก..."
-                        userId={user?.id}
-                        onTagsChange={fetchTags}
-                        returnType="array"
-                      />
-                    </FormControl>
-                    <FormMessage />
+                    <div className="space-y-3">
+                      {/* แสดงแท็กที่เลือกแล้ว */}
+                      {Array.isArray(field.value) && field.value.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {field.value.map((tag, index) => (
+                            <Badge 
+                              key={index} 
+                              variant="secondary" 
+                              className="text-xs"
+                              style={getTagStyle(tag)}
+                            >
+                              {tag}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-4 w-4 p-0 ml-1"
+                                onClick={() => {
+                                  const newTags = field.value.filter((_, i) => i !== index);
+                                  field.onChange(newTags);
+                                }}
+                              >
+                                <X className="h-2 w-2" />
+                              </Button>
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* Dropdown เลือกแท็กที่มีอยู่ */}
+                      <div className="space-y-2">
+                        <div className="text-xs text-muted-foreground">เลือกแท็กที่มีอยู่:</div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="w-full justify-start">
+                              <Plus className="h-4 w-4 mr-2" />
+                              เลือกแท็ก
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="min-w-[200px] max-h-[200px] overflow-y-auto">
+                            {tags.filter(t => !(field.value || []).includes(t.name)).map(t => (
+                              <DropdownMenuItem
+                                key={t.id}
+                                onClick={() => {
+                                  const newTags = [...(field.value || []), t.name];
+                                  field.onChange(newTags);
+                                }}
+                              >
+                                <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ background: t.color || '#6366f1' }} />
+                                {t.name}
+                              </DropdownMenuItem>
+                            ))}
+                            {tags.filter(t => !(field.value || []).includes(t.name)).length === 0 && (
+                              <DropdownMenuItem disabled className="text-muted-foreground">
+                                ไม่มีแท็กอื่นให้เลือก
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+
+                      {/* แท็กแนะนำจาก AI */}
+                      {bookmark.suggested_tags && bookmark.suggested_tags.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="text-xs text-muted-foreground">แท็กแนะนำจาก AI:</div>
+                          <div className="flex flex-wrap gap-1">
+                            {bookmark.suggested_tags.filter(tag => !(field.value || []).includes(tag)).map((tag, index) => (
+                              <Button
+                                key={index}
+                                variant="outline"
+                                size="sm"
+                                className="text-xs h-6 px-2"
+                                onClick={() => {
+                                  const newTags = [...(field.value || []), tag];
+                                  field.onChange(newTags);
+                                }}
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                {tag}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ปุ่มสร้างแท็กใหม่ */}
+                      {/* Replace the minimal tag creation dialog in the edit dialog with the full-featured one */}
+                      <div className="space-y-2">
+                        <div className="text-xs text-muted-foreground">สร้างแท็กใหม่:</div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                          onClick={() => setShowCreateTagDialog(true)}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          สร้างแท็กใหม่
+                        </Button>
+                        <Dialog open={showCreateTagDialog} onOpenChange={setShowCreateTagDialog}>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>สร้างแท็กใหม่</DialogTitle>
+                              <DialogDescription>
+                                ตั้งชื่อแท็ก เลือกสีพื้นหลังและสีตัวอักษร พร้อมดูตัวอย่าง
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                              <Input
+                                placeholder="เช่น ข่าว, AI, เทคโนโลยี"
+                                value={newTagName}
+                                onChange={e => setNewTagName(e.target.value)}
+                              />
+                              <div className="grid gap-4 md:grid-cols-2">
+                                {/* เลือกสีพื้นหลัง */}
+                                <div className="space-y-2">
+                                  <label className="block text-sm font-medium">สีพื้นหลัง</label>
+                                  <div className="grid grid-cols-5 gap-2 max-h-[200px] overflow-y-auto p-2 border rounded-lg">
+                                    {COLOR_PRESETS.map((color) => (
+                                      <button
+                                        key={color.bg}
+                                        type="button"
+                                        onClick={() => setSelectedColor(color)}
+                                        className={`relative aspect-square rounded-md transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${selectedColor.bg === color.bg ? 'ring-2 ring-blue-500' : ''}`}
+                                        style={{ background: color.bg }}
+                                        title={color.name}
+                                      >
+                                        {selectedColor.bg === color.bg && (
+                                          <Check className={`absolute inset-0 m-auto h-4 w-4 ${color.text === '#000000' ? 'text-black' : 'text-white'}`} />
+                                        )}
+                                        <span className="sr-only">{color.name}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                {/* เลือกสีตัวอักษร */}
+                                <div className="space-y-2">
+                                  <label className="block text-sm font-medium">สีตัวอักษร</label>
+                                  <div className="grid grid-cols-5 gap-2 p-2 border rounded-lg">
+                                    {TEXT_COLORS.map((color) => (
+                                      <button
+                                        key={color.value}
+                                        type="button"
+                                        onClick={() => setSelectedTextColor(color)}
+                                        className={`relative aspect-square rounded-md transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border ${selectedTextColor.value === color.value ? 'ring-2 ring-blue-500' : ''}`}
+                                        style={{ 
+                                          background: color.value === '#ffffff' ? '#f3f4f6' : color.value,
+                                          borderColor: color.value === '#ffffff' ? '#e5e7eb' : 'transparent'
+                                        }}
+                                        title={color.name}
+                                      >
+                                        {selectedTextColor.value === color.value && (
+                                          <Check className={`absolute inset-0 m-auto h-4 w-4 ${color.value === '#ffffff' || color.value === '#f3f4f6' ? 'text-black' : 'text-white'}`} />
+                                        )}
+                                        <span className="sr-only">{color.name}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                              {/* ตัวอย่างแท็ก */}
+                              <div className="pt-2">
+                                <label className="block text-sm font-medium mb-2">ตัวอย่าง</label>
+                                <Badge 
+                                  style={{ 
+                                    background: selectedColor.bg,
+                                    color: selectedTextColor.value,
+                                  }}
+                                  className="font-semibold"
+                                >
+                                  {newTagName || "ตัวอย่างแท็ก"}
+                                </Badge>
+                              </div>
+                              <Button
+                                onClick={handleCreateTagFromEditForm}
+                                disabled={!newTagName.trim() || tags.some(t => t.name.trim().toLowerCase() === newTagName.trim().toLowerCase()) || creating}
+                                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                              >
+                                เพิ่ม
+                              </Button>
+                              {tags.some(t => t.name.trim().toLowerCase() === newTagName.trim().toLowerCase()) && (
+                                <div className="text-xs text-red-500 mt-2">มีแท็กนี้อยู่แล้ว</div>
+                              )}
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                    </div>
                   </FormItem>
                 )}
               />
               <DialogFooter>
                 <Button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">บันทึกการแก้ไข</Button>
+                {/* ปุ่มลบลิงก์ในโหมดแก้ไข */}
+                <Button type="button" variant="destructive" onClick={() => { setEditOpen(false); setDeleteOpen(true); }}>
+                  <Trash2 className="h-4 w-4 mr-2" /> ลบลิงก์
+                </Button>
               </DialogFooter>
             </form>
           </Form>

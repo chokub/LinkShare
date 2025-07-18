@@ -203,194 +203,121 @@ export function TagInput({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap gap-2 min-h-[2.5rem] p-2 bg-background rounded-md border">
-        {tags.map((tag, index) => {
-          // Find matching suggestion for color
-          const suggestion = suggestions.find(s => s.name === tag);
-          return (
-            <Badge
-              key={index}
-              variant="secondary"
-              style={suggestion?.color ? {
-                background: suggestion.color,
-                color: suggestion.textColor || '#ffffff',
-              } : undefined}
-              className="h-6 px-2 flex items-center gap-1 font-semibold"
-            >
-              {tag}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  removeTag(index);
-                }}
-                className="hover:bg-black/20 rounded-full p-0.5"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          );
-        })}
-        <div className="flex-1 flex gap-2 items-center min-w-[150px]">
-          <Input
-            ref={inputRef}
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="flex-1 border-0 p-0 h-6 focus-visible:ring-0 placeholder:text-muted-foreground"
-            placeholder={tags.length === 0 ? placeholder : ""}
-          />
-          <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                type="button" 
-                variant="ghost" 
-                size="icon"
-                className="h-6 w-6"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent 
-              align="end" 
-              className="w-[280px] max-h-[500px] overflow-y-auto"
-            >
-              {/* ปุ่มสร้างแท็กใหม่ */}
-              {userId && (
-                <>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setCreateDialogOpen(true);
-                      setDropdownOpen(false);
-                    }}
-                    className="flex items-center gap-2 cursor-pointer"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>สร้างแท็กใหม่</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                </>
-              )}
-
-              {/* แท็กที่มีอยู่ */}
-              {suggestions.length > 0 && (
-                <>
-                  <DropdownMenuLabel className="flex items-center gap-2">
-                    <Tags className="h-4 w-4" />
-                    แท็กของคุณ
-                  </DropdownMenuLabel>
-                  <div className="p-2 flex flex-wrap gap-1">
-                    {suggestions.map((tag) => (
-                      <Badge
-                        key={tag.id}
-                        style={tag.color ? {
-                          background: tag.color,
-                          color: tag.textColor || '#ffffff',
-                        } : undefined}
-                        className="cursor-pointer hover:opacity-80 font-semibold"
-                        onClick={() => handleSuggestionClick(tag.name)}
-                      >
-                        {tag.name}
-                      </Badge>
-                    ))}
-                  </div>
-                  <DropdownMenuSeparator />
-                </>
-              )}
-
-              {/* แท็กแนะนำตามหมวดหมู่ */}
-              {Object.entries(QUICK_SUGGESTIONS).map(([category, categoryTags]) => {
-                const IconComponent = CATEGORY_ICONS[category as keyof typeof CATEGORY_ICONS];
-                return (
-                  <DropdownMenuGroup key={category}>
-                    <DropdownMenuLabel className="flex items-center gap-2">
-                      <IconComponent className="h-4 w-4" />
-                      {category}
-                    </DropdownMenuLabel>
-                    <div className="p-2 flex flex-wrap gap-1">
-                      {categoryTags.map((tag) => (
-                        <Badge
-                          key={tag}
-                          variant="outline"
-                          className="cursor-pointer hover:bg-accent"
-                          onClick={() => handleSuggestionClick(tag)}
-                        >
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                    <DropdownMenuSeparator />
-                  </DropdownMenuGroup>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-
-      {/* Dialog สร้างแท็กใหม่ */}
+      {/* ปุ่ม + ใหญ่สำหรับสร้างแท็กใหม่ */}
+      <button
+        type="button"
+        className="w-full flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-700 text-white font-semibold shadow-md transition-all duration-150 py-3 text-lg"
+        onClick={() => setCreateDialogOpen(true)}
+      >
+        <Plus className="h-6 w-6" />
+        <span>สร้างแท็กใหม่</span>
+      </button>
+      {/* Dialog สำหรับสร้างแท็กใหม่ (คงไว้เหมือนเดิม) */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>สร้างแท็กใหม่</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">ชื่อแท็ก</label>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!userId || !newTagName.trim()) return;
+              setIsCreating(true);
+              try {
+                const { data, error } = await supabase
+                  .from("tags")
+                  .insert({
+                    name: newTagName.trim(),
+                    color: selectedColor.bg,
+                    textColor: selectedColor.text,
+                    user_id: userId,
+                  })
+                  .select()
+                  .single();
+                if (error) throw error;
+                handleSuggestionClick(data.name);
+                if (onTagsChange) onTagsChange();
+                setCreateDialogOpen(false);
+                setNewTagName("");
+                setSelectedColor(COLOR_PRESETS[0]);
+                setSelectedTextColor(TEXT_COLORS[0]);
+              } catch (error) {
+                alert("ไม่สามารถสร้างแท็กได้ กรุณาลองใหม่อีกครั้ง");
+              } finally {
+                setIsCreating(false);
+              }
+            }}
+            className="space-y-4"
+          >
+            <div>
+              <label className="block text-sm font-medium mb-1">ชื่อแท็ก</label>
               <Input
                 value={newTagName}
-                onChange={(e) => setNewTagName(e.target.value)}
-                placeholder="เช่น AI, เทคโนโลยี, การเรียนรู้"
+                onChange={e => setNewTagName(e.target.value)}
+                placeholder="เช่น ข่าว, AI, เทคโนโลยี"
+                required
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">เลือกสี</label>
-              <div className="grid grid-cols-5 gap-2 max-h-[320px] overflow-y-auto p-2">
-                {COLOR_PRESETS.map((color) => (
-                  <button
-                    key={color.bg}
-                    type="button"
-                    onClick={() => setSelectedColor(color)}
-                    className="relative aspect-square rounded-md transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                    style={{ background: color.bg }}
-                    title={color.name}
-                  >
-                    {selectedColor.bg === color.bg && (
-                      <Check className={`absolute inset-0 m-auto h-4 w-4 ${color.text === '#000000' ? 'text-black' : 'text-white'}`} />
-                    )}
-                    <span className="sr-only">{color.name}</span>
-                  </button>
-                ))}
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* เลือกสีพื้นหลัง */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">สีพื้นหลัง</label>
+                <div className="grid grid-cols-5 gap-2 max-h-[160px] overflow-y-auto p-2 border rounded-lg">
+                  {COLOR_PRESETS.map((color) => (
+                    <button
+                      key={color.bg}
+                      type="button"
+                      onClick={() => setSelectedColor(color)}
+                      className={`relative aspect-square rounded-md transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${selectedColor.bg === color.bg ? 'ring-2 ring-blue-500' : ''}`}
+                      style={{ background: color.bg }}
+                      title={color.name}
+                    >
+                      {selectedColor.bg === color.bg && (
+                        <Check className={`absolute inset-0 m-auto h-4 w-4 ${color.text === '#000000' ? 'text-black' : 'text-white'}`} />
+                      )}
+                      <span className="sr-only">{color.name}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="pt-2">
-                <Badge 
-                  style={{ 
-                    background: selectedColor.bg,
-                    color: selectedColor.text,
-                  }}
-                  className="font-semibold"
-                >
-                  {newTagName || "ตัวอย่างแท็ก"}
-                </Badge>
+              {/* เลือกสีตัวอักษร */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">สีตัวอักษร</label>
+                <div className="grid grid-cols-5 gap-2 p-2 border rounded-lg">
+                  {TEXT_COLORS.map((color) => (
+                    <button
+                      key={color.value}
+                      type="button"
+                      onClick={() => setSelectedTextColor(color)}
+                      className={`relative aspect-square rounded-md transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border ${selectedTextColor.value === color.value ? 'ring-2 ring-purple-500' : ''}`}
+                      style={{ background: color.value === '#ffffff' ? '#f3f4f6' : color.value, borderColor: color.value === '#ffffff' ? '#e5e7eb' : 'transparent' }}
+                      title={color.name}
+                    >
+                      {selectedTextColor.value === color.value && (
+                        <Check className={`absolute inset-0 m-auto h-4 w-4 ${color.value === '#ffffff' || color.value === '#f3f4f6' ? 'text-black' : 'text-white'}`} />
+                      )}
+                      <span className="sr-only">{color.name}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setCreateDialogOpen(false)}
-            >
-              ยกเลิก
-            </Button>
-            <Button
-              onClick={handleCreateNewTag}
-              disabled={!newTagName.trim() || isCreating}
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-            >
-              {isCreating ? "กำลังสร้าง..." : "สร้างแท็ก"}
-            </Button>
-          </DialogFooter>
+            {/* ตัวอย่างแท็ก */}
+            <div className="pt-2">
+              <label className="block text-sm font-medium mb-2">ตัวอย่าง</label>
+              <Badge
+                style={{ background: selectedColor.bg, color: selectedTextColor.value }}
+                className="font-semibold"
+              >
+                {newTagName || "ตัวอย่างแท็ก"}
+              </Badge>
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={isCreating || !newTagName.trim()} className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
+                {isCreating ? "กำลังสร้าง..." : "สร้างแท็ก"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

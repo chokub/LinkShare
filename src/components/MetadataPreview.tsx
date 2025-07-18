@@ -83,11 +83,11 @@ export const MetadataPreview = ({ metadata, url, isLoading, onRefresh }: Metadat
         <div className="flex gap-4">
           <div className="relative">
             <img
-              src={metadata.thumbnail}
+              src={metadata.thumbnail && !metadata.thumbnail.includes("photo-1611224923853-80b023f02d71") ? metadata.thumbnail : "/linkkeep-logo.png"}
               alt={metadata.title}
               className="w-20 h-20 object-cover rounded"
               onError={(e) => {
-                (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1611224923853-80b023f02d71?w=300&h=200&fit=crop&q=60";
+                (e.target as HTMLImageElement).src = "/linkkeep-logo.png";
               }}
             />
             <Badge 

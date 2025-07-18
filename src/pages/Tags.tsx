@@ -165,7 +165,23 @@ const Tags = () => {
 
   const handleDeleteTag = async (tag) => {
     setLoading(true);
+    // 1. ลบ tag ออกจากตาราง tags
     await supabase.from("tags").delete().eq("id", tag.id);
+
+    // 2. ดึง bookmarks ที่มี tag นี้
+    const { data: bookmarksWithTag } = await supabase
+      .from("bookmarks")
+      .select("id, tags")
+      .contains("tags", [tag.name]);
+
+    // 3. ลบ tag ออกจากแต่ละ bookmark
+    if (bookmarksWithTag) {
+      for (const bm of bookmarksWithTag) {
+        const newTags = (bm.tags || []).filter(t => t !== tag.name);
+        await supabase.from("bookmarks").update({ tags: newTags }).eq("id", bm.id);
+      }
+    }
+
     setLoading(false);
     fetchTags();
   };

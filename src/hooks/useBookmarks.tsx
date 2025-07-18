@@ -110,7 +110,7 @@ export const useBookmarks = () => {
 
       let finalTitle = bookmarkData.title;
       let finalDescription = "";
-      let finalThumbnail = "https://images.unsplash.com/photo-1611224923853-80b023f02d71?w=300&h=200&fit=crop&q=60";
+      let finalThumbnail = null;
       let finalPlatform = bookmarkData.platform || "Other";
       let channelName: string | null = bookmarkData.channel_name || null;
       let channelAvatar: string | null = bookmarkData.channel_avatar || null;

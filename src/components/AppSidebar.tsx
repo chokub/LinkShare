@@ -108,7 +108,7 @@ export function AppSidebar({ onAddLinkClick, onFilterChange, selectedFilter, pla
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton>
+                <SidebarMenuButton onClick={() => navigate("/settings")}> 
                   <Settings className="h-4 w-4" />
                   <span>ตั้งค่า</span>
                 </SidebarMenuButton>

@@ -109,35 +109,38 @@ async function extractMetadata(url: string): Promise<MetadataResult> {
     // Thumbnail
     let thumbnail =
       doc.querySelector('meta[property="og:image"]')?.getAttribute('content') ||
-                       doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content') ||
-                       '';
-      
+      doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content') ||
+      '';
     // Fallback: หา <img> ที่ใหญ่ที่สุดในหน้า
     if (!thumbnail) {
       let maxArea = 0;
       let bestImg = '';
       doc.querySelectorAll('img').forEach(img => {
-          const src = img.getAttribute('src') || '';
+        const src = img.getAttribute('src') || '';
         const width = parseInt(img.getAttribute('width') || '0');
         const height = parseInt(img.getAttribute('height') || '0');
         const area = width * height;
         if (src && area > maxArea && !src.startsWith('data:')) {
           maxArea = area;
           bestImg = src;
-    }
+        }
       });
       if (bestImg) thumbnail = bestImg;
     }
-    
     // Clean up
     title = title.trim();
     description = description.trim();
     thumbnail = thumbnail.trim();
-
+    // ถ้า thumbnail เป็นรูป unsplash ที่ไม่ต้องการ ให้คืนเป็น string ว่าง
+    if (thumbnail.includes("photo-1611224923853-80b023f02d71")) {
+      thumbnail = '';
+    }
+    // ไม่ตั้ง default thumbnail เป็นรูป unsplash ใด ๆ ทั้งสิ้น
+    // ถ้าไม่มี thumbnail จริง ๆ ให้คืนเป็น string ว่าง
     return {
       title,
       description,
-      thumbnail,
+      thumbnail: thumbnail || '',
       platform: '' // หรือจะใส่ autoDetectPlatform(url) ก็ได้
     };
   } catch (e) {

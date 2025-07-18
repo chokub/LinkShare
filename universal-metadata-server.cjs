@@ -59,10 +59,7 @@ function extractMetaFromHtml(html, url) {
     $('meta[name="description"]').attr('content') ||
     $('meta[property="description"]').attr('content') ||
     '';
-  let thumbnail =
-    $('meta[property="og:image"]').attr('content') ||
-    $('meta[name="twitter:image"]').attr('content') ||
-    '';
+  let thumbnail = '';
   if (!thumbnail) {
     let maxArea = 0, bestImg = '';
     $('img').each((i, img) => {
@@ -70,12 +67,22 @@ function extractMetaFromHtml(html, url) {
       const width = parseInt($(img).attr('width') || '0');
       const height = parseInt($(img).attr('height') || '0');
       const area = width * height;
-      if (src && area > maxArea && !src.startsWith('data:')) {
+      console.log('FILTER IMG', src, area);
+      if (
+        src &&
+        area > maxArea &&
+        !src.startsWith('data:') &&
+        !src.includes('unsplash.com') &&
+        !src.includes('to-do-doing-done')
+      ) {
         maxArea = area;
         bestImg = src;
       }
     });
-    if (bestImg) thumbnail = bestImg;
+    if (bestImg) {
+      console.log('SELECTED IMG', bestImg);
+      thumbnail = bestImg;
+    }
   }
   // Fallback: favicon
   if (!thumbnail) {
@@ -125,20 +132,29 @@ async function tryPuppeteer(url) {
         || getMeta('twitter:description', 'name')
         || getMeta('description', 'name')
         || '';
-      let thumbnail = getMeta('og:image', 'property')
-        || getMeta('twitter:image', 'name')
-        || '';
+      let thumbnail = '';
       if (!thumbnail) {
         let maxArea = 0, bestImg = '';
         document.querySelectorAll('img').forEach(img => {
           const src = img.src || '';
           const area = (img.naturalWidth || 0) * (img.naturalHeight || 0);
-          if (src && area > maxArea && !src.startsWith('data:')) {
+          // เพิ่ม log
+          console.log('FILTER IMG', src, area);
+          if (
+            src &&
+            area > maxArea &&
+            !src.startsWith('data:') &&
+            !src.includes('unsplash.com') &&
+            !src.includes('to-do-doing-done')
+          ) {
             maxArea = area;
             bestImg = src;
           }
         });
-        if (bestImg) thumbnail = bestImg;
+        if (bestImg) {
+          console.log('SELECTED IMG', bestImg);
+          thumbnail = bestImg;
+        }
       }
       // Fallback: favicon
       if (!thumbnail) {

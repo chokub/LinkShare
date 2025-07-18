@@ -40,22 +40,30 @@ app.post('/api/extract-metadata', async (req, res) => {
         || getMeta('description', 'name')
         || '';
 
-      let thumbnail = getMeta('og:image', 'property')
-        || getMeta('twitter:image', 'name')
-        || '';
-
       // Fallback: หา <img> ที่ใหญ่ที่สุด
       if (!thumbnail) {
         let maxArea = 0, bestImg = '';
         document.querySelectorAll('img').forEach(img => {
-          const src = img.src || '';
-          const area = (img.naturalWidth || 0) * (img.naturalHeight || 0);
-          if (src && area > maxArea && !src.startsWith('data:')) {
+          const src = img.getAttribute('src') || '';
+          const width = parseInt(img.getAttribute('width') || '0');
+          const height = parseInt(img.getAttribute('height') || '0');
+          const area = width * height;
+          console.log('FILTER IMG', src, area);
+          if (
+            src &&
+            area > maxArea &&
+            !src.startsWith('data:') &&
+            !src.includes('unsplash.com') &&
+            !src.includes('to-do-doing-done')
+          ) {
             maxArea = area;
             bestImg = src;
           }
         });
-        if (bestImg) thumbnail = bestImg;
+        if (bestImg) {
+          console.log('SELECTED IMG', bestImg);
+          thumbnail = bestImg;
+        }
       }
 
       return { title, description, thumbnail };

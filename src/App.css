@@ -40,3 +40,24 @@
 .read-the-docs {
   color: #888;
 }
+
+.card-glow-anim {
+  position: relative;
+  z-index: 1;
+}
+.card-glow-anim::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 16px;
+  padding: 2px;
+  background: conic-gradient(from var(--glow-angle, 0deg), #ffe066, #ffd700, #fffbe0, #ffe066 100%);
+  animation: border-glow-spin 2s linear infinite;
+  z-index: 2;
+  pointer-events: none;
+  filter: blur(2px) brightness(1.2);
+}
+@keyframes border-glow-spin {
+  0% { --glow-angle: 0deg; }
+  100% { --glow-angle: 360deg; }
+}

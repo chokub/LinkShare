@@ -13,9 +13,8 @@ async function scrapeWithPuppeteer(url) {
   // ดึง meta tag
   const title = await page.$eval('meta[property="og:title"]', el => el.content).catch(() => '');
   const description = await page.$eval('meta[property="og:description"]', el => el.content).catch(() => '');
-  const image = await page.$eval('meta[property="og:image"]', el => el.content).catch(() => '');
   await browser.close();
-  return { title, description, image };
+  return { title, description };
 }
 
 app.post('/api/fb-scrape', async (req, res) => {
@@ -32,20 +31,16 @@ app.post('/api/fb-scrape', async (req, res) => {
     const $ = cheerio.load(data);
     let title = $('meta[property="og:title"]').attr('content') || '';
     let description = $('meta[property="og:description"]').attr('content') || '';
-    let image = $('meta[property="og:image"]').attr('content') || '';
-
     // ถ้าไม่ได้ข้อมูล ลอง puppeteer
-    if (!title && !description && !image) {
+    if (!title && !description) {
       const result = await scrapeWithPuppeteer(url);
       title = result.title;
       description = result.description;
-      image = result.image;
     }
 
     res.json({
       title,
       description,
-      image,
       platform: 'Facebook'
     });
   } catch (err) {
@@ -55,7 +50,6 @@ app.post('/api/fb-scrape', async (req, res) => {
       res.json({
         title: result.title,
         description: result.description,
-        image: result.image,
         platform: 'Facebook'
       });
     } catch (err2) {
@@ -75,7 +69,6 @@ app.post('/api/shopee-scrape', async (req, res) => {
     });
     const $ = cheerio.load(data);
     const title = $('meta[property="og:title"]').attr('content') || '';
-    const image = $('meta[property="og:image"]').attr('content') || '';
     // Shopee มักจะมีราคาใน meta tag หรือใน script
     let price = '';
     // ลองดึงจาก meta
@@ -90,7 +83,7 @@ app.post('/api/shopee-scrape', async (req, res) => {
         } catch {}
       }
     }
-    res.json({ title, image, price, platform: 'Shopee' });
+    res.json({ title, platform: 'Shopee' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch Shopee product', detail: err.message });
   }
